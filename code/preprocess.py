@@ -1,8 +1,20 @@
 import json
 import os
 from PIL import Image
+import tensorflow as tf
 
-def prepare_data(inputs_file_path, labels_file_path, num_examples=100):
+def get_batch(labels):
+    imgs = []
+    for label in labels:
+        with Image.open(label) as image:
+            imgs.append(tf.keras.preprocessing.image.img_to_array(image) / 255)
+    return imgs
+
+def get_data(labels_file_path):
+    with open(labels_file_path, "r") as f:
+        return json.load(f)
+
+def parse_data(inputs_file_path, labels_file_path, num_examples=100, save_data=False):
     """
     Takes in file paths and returns the images and associated labels
 
@@ -26,6 +38,7 @@ def prepare_data(inputs_file_path, labels_file_path, num_examples=100):
         curr = {}
         curr["ID"] = label["ID"]
         original_file = os.path.join(inputs_file_path, label["ID"] + ".jpg")
+        # new file name for edited file
         curr["file"] = os.path.join(inputs_file_path, "resized", label["ID"] + "_256.jpg")
         # resize image and get image shape
         try:
@@ -34,7 +47,8 @@ def prepare_data(inputs_file_path, labels_file_path, num_examples=100):
             continue
         sz = image.size
         img = image.resize([256, 256])
-        img.save(curr["file"])
+        if save_data:
+            img.save(curr["file"])
         boxes = []
         # go through each bounding box
         for bounding_box in label["gtboxes"]:
@@ -44,12 +58,15 @@ def prepare_data(inputs_file_path, labels_file_path, num_examples=100):
             # normalize the bounding box between 0 and 1
             x_0 = bounding_box["hbox"][0] / sz[0]  # how far from left to start
             x_1 = bounding_box["hbox"][1] / sz[1]  # how far down to start
-            x_2 = (bounding_box["hbox"][2] + bounding_box["hbox"][0]) / sz[0]  # how far right to move
-            x_3 = (bounding_box["hbox"][3] + bounding_box["hbox"][1]) / sz[1]  # how far down to move
+            x_2 = (bounding_box["hbox"][2] + bounding_box["hbox"][0]) / sz[0]  # how far the right edge is
+            x_3 = (bounding_box["hbox"][3] + bounding_box["hbox"][1]) / sz[1]  # how far the lower edge is
             boxes.append([x_0, x_1, x_2, x_3])
         curr["boxes"] = boxes
         output.append(curr)
         i += 1
+    if save_data:
+        with open(os.path.join(inputs_file_path, "resized", "annotations.json"), "w") as f:
+            json.dump(output, f)
     return output
 
 def invalid(box, sz):
@@ -61,7 +78,9 @@ def invalid(box, sz):
     returns:
         True if the bounding box has sections outside the picture; otherwise False
     """
-    return box[0] < 0 or box[1] < 0
+    return box[0] < 0 or box[1] < 0 or box[0] + box[2] > sz[0] or box[1] + box[3] > sz[1]
 
 if __name__ == "__main__":
-    prepare_data("images/CrowdHuman_train01/Images", "annotation/annotation_train.odgt")
+    x = prepare_data("images/CrowdHuman_train01/Images", "annotation/annotation_train.odgt", save_data=True)
+    y = get_data("images/CrowdHuman_train01/Images/resized/annotations.json")
+    assert x == y
