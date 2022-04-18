@@ -1,10 +1,12 @@
 from PIL import Image, ImageDraw
 
-def visualize(filepath, bounding_boxes):
+def visualize(filepath, bounding_boxes, found_boxes):
     img = Image.open(filepath)
     Drawer = ImageDraw.Draw(img)
     for box in bounding_boxes:
         Drawer.rectangle([i * 256 for i in box], fill=None)
+    for box in found_boxes:
+        Drawer.rectangle([i * 256 for i in box], fill=None, outline="red")
     img.show()
 
 if __name__ == "__main__":
