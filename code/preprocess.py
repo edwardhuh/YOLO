@@ -38,14 +38,14 @@ def prepare_data(inputs_file_path, labels_file_path, num_examples=100):
         boxes = []
         # go through each bounding box
         for bounding_box in label["gtboxes"]:
-            # don't get data that's unsure or ignored
-            if not bounding_box["head_attr"].keys() or bounding_box["head_attr"]["occ"] == 1 or bounding_box["head_attr"]["ignore"] == 1 or invalid(bounding_box["hbox"], sz):
+            # don't get data that's unsure or ignored or out-of-bounds
+            if not bounding_box["head_attr"].keys() or bounding_box["head_attr"]["unsure"] or bounding_box["head_attr"]["ignore"] or invalid(bounding_box["hbox"], sz):
                 continue
             # normalize the bounding box between 0 and 1
             x_0 = bounding_box["hbox"][0] / sz[0]  # how far from left to start
             x_1 = bounding_box["hbox"][1] / sz[1]  # how far down to start
-            x_2 = bounding_box["hbox"][2] / sz[0]  # how far right to move
-            x_3 = bounding_box["hbox"][3] / sz[1]  # how far down to move
+            x_2 = (bounding_box["hbox"][2] + bounding_box["hbox"][0]) / sz[0]  # how far right to move
+            x_3 = (bounding_box["hbox"][3] + bounding_box["hbox"][1]) / sz[1]  # how far down to move
             boxes.append([x_0, x_1, x_2, x_3])
         curr["boxes"] = boxes
         output.append(curr)
@@ -61,7 +61,7 @@ def invalid(box, sz):
     returns:
         True if the bounding box has sections outside the picture; otherwise False
     """
-    return box[0] < 0 or box[2] + box[0] > sz[0] or box[1] < 0 or box[3] + box[1] > sz[1]
+    return box[0] < 0 or box[1] < 0
 
 if __name__ == "__main__":
     prepare_data("images/CrowdHuman_train01/Images", "annotation/annotation_train.odgt")
