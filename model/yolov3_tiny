@@ -1,0 +1,105 @@
+from re import S
+import numpy as np
+import tensorflow as tf
+
+from tf.keras.layers import (
+    Conv2D,
+    UpSampling2D,
+    Concatenate,
+    MaxPooling2D,
+    BatchNormalization,
+    LeakyReLU,
+)
+
+class YOLO_Head(tf.keras.Layer):
+    """
+    Implements the YOLOv3 head.
+    """
+
+    # TODO: Implement the YOLOv3 head.
+    pass
+
+
+class ConvUnit(tf.keras.Layer):
+    def __init__(
+        self,
+        filters,
+        kernel_size,
+        name,
+        strides=1,
+        padding="SAME",
+        activation=None,
+        use_bias=False,
+        pool=True,
+        pool_size=2,
+        pool_strides=2,
+        **kwargs
+    ):
+        super(ConvUnit, self).__init__(name=name)
+        self.pool = pool
+        self.conv = Conv2D(
+            filters,
+            kernel_size,
+            strides=strides,
+            padding=padding,
+            activation=LeakyReLU(alpha=0.1) if activation is None else activation,
+            use_bias=use_bias,
+            **kwargs
+        )
+        self.bn = BatchNormalization()
+        if self.pool:
+            self.max_pool = MaxPooling2D(pool_size, pool_strides, padding=padding)
+
+    def call(self, inputs):
+        x = self.conv(inputs)
+        x = self.bn(x)
+        if self.pool:
+            x = self.max_pool(x)
+        return x
+
+
+class YOLOv3_Tiny(tf.keras.Model):
+    def __init__(
+        self,
+        n_classes,
+        n_anchors,
+        model_size,
+        max_output_size,
+        iou_threshold,
+        score_threshold,
+    ):
+        super(YOLOv3_Tiny, self).__init__()
+        self.n_classes = n_classes
+        self.n_anchors = n_anchors
+        self.model_size = model_size
+        self.max_output_size = max_output_size
+        self.iou_threshold = iou_threshold
+        self.score_threshold = score_threshold
+
+        self.conv1 = ConvUnit(16, 3, "conv1")
+        self.conv2 = ConvUnit(32, 3, "conv2")
+        self.conv3 = ConvUnit(64, 3, "conv3")
+        self.conv4 = ConvUnit(128, 3, "conv4")
+        self.conv5 = ConvUnit(256, 3, "conv5")
+        self.conv6 = ConvUnit(512, 3, "conv6", pool_strides=1)
+        self.conv7 = ConvUnit(1024, 3, "conv7", pool=False)
+
+        ######
+
+        self.conv8 = ConvUnit(256, 1, "conv8", pool=False)
+        self.conv9 = ConvUnit(512, 3, "conv9", pool=False)
+        self.conv10 = ConvUnit(255, 1, "conv10", pool=False, activation="linear")
+
+        ######
+
+        ### TODO: Insert first YOLO_Head here
+
+        self.conv11 = ConvUnit(128, 1, "conv11", pool=False)
+        self.upsample1 = UpSampling2D(2)
+
+        self.conv12 = ConvUnit(256, 3, "conv12", pool=False)
+        self.conv13 = ConvUnit(255, 1, "conv13", activation="linear", pool=False)
+
+        ######
+
+        ### TODO: Insert second YOLO_Head here
