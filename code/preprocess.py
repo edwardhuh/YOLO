@@ -73,8 +73,11 @@ def parse_data(inputs_file_path, labels_file_path, num_examples=100, save_data=F
                 continue
             # normalize the bounding box between 0 and 1
             # just looking at head boxes, not body boxes
-            x_0 = bounding_box["hbox"][0] / sz[0]  # how far from left to start
-            x_1 = bounding_box["hbox"][1] / sz[1]  # how far down to start
+            x_0 = bounding_box["hbox"][0] + bounding_box["hbox"][2] // 2
+            x_1 = bounding_box["hbox"][1] + bounding_box["hbox"][3] // 2
+
+            x_0 = x_0 / sz[0]  # how far from left to start
+            x_1 = x_1 / sz[1]  # how far down to start
             x_2 = bounding_box["hbox"][2] / sz[0]  # width of box
             x_3 = bounding_box["hbox"][3] / sz[1]  # height of box
             boxes.append([x_0, x_1, x_2, x_3])
@@ -125,8 +128,11 @@ def parse_data_single(inputs_file_path, labels_file_path, num_examples=100):
                 continue
             # normalize the bounding box between 0 and 1
             # just looking at head boxes, not body boxes
-            x_0 = bounding_box["hbox"][0] / sz[0]  # how far from left to start
-            x_1 = bounding_box["hbox"][1] / sz[1]  # how far down to start
+            # get center instead of corner
+            x_0 = bounding_box["hbox"][0] + bounding_box["hbox"][2] // 2
+            x_1 = bounding_box["hbox"][1] + bounding_box["hbox"][3] // 2
+            x_0 = x_0 / sz[0]  # how far from left to start
+            x_1 = x_1 / sz[1]  # how far down to start
             x_2 = bounding_box["hbox"][2] / sz[0]  # width of box
             x_3 = bounding_box["hbox"][3] / sz[1]  # height of box
             boxes.append([x_0, x_1, x_2, x_3])
@@ -151,11 +157,11 @@ def invalid(box, sz):
 
 if __name__ == "__main__":
     # assumes you're in the `data/` directory
-    # x = parse_data("images/CrowdHuman_train01/Images", "annotation/annotation_train.odgt", save_data=True)
+    x = parse_data("images/CrowdHuman_train01/Images", "annotation/annotation_train.odgt", save_data=True)
     # y = get_data("images/CrowdHuman_train01/Images/resized/annotations.json")
     # assert x == y
     # z = get_batch(y)[0]
-    parse_data_single("images/CrowdHuman_train01/Images", "annotation/annotation_train.odgt")
+    # parse_data_single("images/CrowdHuman_train01/Images", "annotation/annotation_train.odgt")
     # img = tf.keras.preprocessing.image.array_to_img(z)
     # plt.imshow(img)
     # plt.show()
