@@ -1,0 +1,202 @@
+import numpy as np
+import tensorflow as tf
+
+from tf.keras.layers import (
+    Conv2D,
+    Concatenate,
+    UpSampling2D,
+    MaxPooling2D,
+    BatchNormalization,
+    LeakyReLU,
+)
+
+
+class YOLO_Head(tf.keras.Layer):
+    """
+    Implements the YOLOv3 head.
+    """
+
+    # 2 values for box center offsets(in x an y, relative to cell center),
+    # 2 values box size scales (in x and y, relative to anchor dimensions),
+    # 1 value for objectness score (between 0 and 1),
+    # number-of-classes values for class score (between 0 and 1).
+
+    def __init__(self, anchors, num_classes, img_size, **kwargs):
+
+        super(YOLO_Head, self).__init__(**kwargs)
+
+        self.anchors = anchors
+        self.n_anchors = len(self.anchors)
+        self.num_classes = num_classes
+        self.img_size = img_size
+
+    def call(self, inputs, input_shape):
+        """Reshapes `inputs` into final YOLO output format:
+
+        # 2 values for box center offsets(in x an y, relative to cell center),
+        # 2 values box size scales (in x and y, relative to anchor dimensions),
+        # 1 value for objectness score (between 0 and 1),
+        # number-of-classes values for class score (between 0 and 1).
+        """
+
+        # 1. Reshape to batch_size x grid_x x grid_y x num_anchors x 5
+
+        grid_y, grid_x = tf.shape(inputs)[1:3]
+        n_anchors = self.n_anchors
+
+        inputs = tf.reshape(
+            inputs, (-1, grid_y, grid_x, n_anchors, 5 + self.num_classes)
+        )
+
+        # 2. Split to batch_size x grid_size x grid_size x num_anchors x 2
+
+        grid_ys = tf.tile(tf.expand_dims(tf.range(grid_y), axis=1), [1, grid_x])
+        grid_xs = tf.tile(tf.expand_dims(tf.range(grid_x), axis=0), [grid_y, 1])
+        grid = tf.concat(
+            [
+                grid_xs[:, :, tf.newaxis, tf.newaxis],
+                grid_ys[:, :, tf.newaxis, tf.newaxis],
+            ],
+            axis=-1,
+        )
+        grid = tf.cast(grid, tf.float32)
+
+        # 3. Add center offset and scale with anchors
+        box_xy = (tf.math.sigmoid(inputs[..., :2]) + grid) / tf.cast(
+            [grid_y, grid_x], tf.float32
+        )
+        box_wh = (
+            tf.math.exp(inputs[..., 2:4])
+            * self.anchors
+            / tf.cast(input_shape, tf.float32)
+        )
+        box_confidence = tf.math.sigmoid(inputs[..., 4:5])
+        box_class_probs = tf.math.sigmoid(inputs[..., 5:])
+
+        return box_xy, box_wh, box_confidence, box_class_probs
+
+
+class ConvUnit(tf.keras.Layer):
+    def __init__(
+        self,
+        filters,
+        kernel_size,
+        name,
+        strides=1,
+        padding="SAME",
+        activation=None,
+        use_bias=False,
+        pool=True,
+        pool_size=2,
+        pool_strides=2,
+        **kwargs
+    ):
+        super(ConvUnit, self).__init__(name=name)
+        self.pool = pool
+        self.conv = Conv2D(
+            filters,
+            kernel_size,
+            strides=strides,
+            padding=padding,
+            activation=LeakyReLU(alpha=0.1) if activation is None else activation,
+            use_bias=use_bias,
+            **kwargs
+        )
+        self.bn = BatchNormalization()
+        if self.pool:
+            self.max_pool = MaxPooling2D(pool_size, pool_strides, padding=padding)
+
+    def call(self, inputs):
+        x = self.conv(inputs)
+        x = self.bn(x)
+        if self.pool:
+            x = self.max_pool(x)
+        return x
+
+
+class YOLOv3_Tiny(tf.keras.Model):
+    def __init__(
+        self,
+        n_classes,
+        n_anchors,
+        model_size,
+        max_output_size,
+        iou_threshold,
+        score_threshold,
+    ):
+        super(YOLOv3_Tiny, self).__init__()
+        self.n_classes = n_classes
+        self.n_anchors = n_anchors
+        self.model_size = model_size
+        self.max_output_size = max_output_size
+        self.iou_threshold = iou_threshold
+        self.score_threshold = score_threshold
+
+        self.conv1 = ConvUnit(16, 3, "conv1")
+        self.conv2 = ConvUnit(32, 3, "conv2")
+        self.conv3 = ConvUnit(64, 3, "conv3")
+        self.conv4 = ConvUnit(128, 3, "conv4")
+        self.conv5 = ConvUnit(256, 3, "conv5")
+        self.conv6 = ConvUnit(512, 3, "conv6", pool_strides=1)
+        self.conv7 = ConvUnit(1024, 3, "conv7", pool=False)
+
+        ######
+
+        self.conv8 = ConvUnit(256, 1, "conv8", pool=False)
+        self.conv9 = ConvUnit(512, 3, "conv9", pool=False)
+        self.conv10 = ConvUnit(
+            self.n_anchors / 2 * (5 + self.num_classes),
+            1,
+            "conv10",
+            pool=False,
+            activation="linear",
+        )
+
+        ######
+        self.concat = Concatenate(axis=-1)
+
+        ### TODO: Insert first YOLO_Head here
+
+        self.conv11 = ConvUnit(128, 1, "conv11", pool=False)
+        self.upsample1 = UpSampling2D(2)
+
+        self.conv12 = ConvUnit(256, 3, "conv12", pool=False)
+        self.conv13 = ConvUnit(
+            self.n_anchors / 2 * (5 + self.num_classes),
+            1,
+            "conv13",
+            activation="linear",
+            pool=False,
+        )
+
+        ######
+
+        ### TODO: Insert second YOLO_Head here
+
+    def __call__(self, inputs):
+
+        x1 = self.conv1(inputs)
+        x1 = self.conv2(x1)
+        x1 = self.conv3(x1)
+        x1 = self.conv4(x1)
+        x1 = self.conv5(x1)
+
+        x2 = self.conv6(x1)
+        x2 = self.conv7(x2)
+        x2 = self.conv8(x2)
+
+        y1 = self.conv9(x2)
+        y1 = self.conv10(y1)
+
+        ######
+
+        x2 = self.conv11(x2)
+        x2 = self.upsample1(x2)
+
+        x3 = self.concat([x2, x1])
+        y2 = self.conv12(x3)
+        y2 = self.conv13(y2)
+
+        ######
+
+        return y1, y2
