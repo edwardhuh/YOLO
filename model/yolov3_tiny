@@ -21,12 +21,10 @@ class YOLO_Head(tf.keras.Layer):
     # 1 value for objectness score (between 0 and 1),
     # number-of-classes values for class score (between 0 and 1).
 
-    def __init__(self, anchors, num_classes, img_size, **kwargs):
+    def __init__(self, num_classes, img_size, **kwargs):
 
         super(YOLO_Head, self).__init__(**kwargs)
 
-        self.anchors = anchors
-        self.n_anchors = len(self.anchors)
         self.num_classes = num_classes
         self.img_size = img_size
 
@@ -39,14 +37,11 @@ class YOLO_Head(tf.keras.Layer):
         # number-of-classes values for class score (between 0 and 1).
         """
 
-        # 1. Reshape to batch_size x grid_x x grid_y x num_anchors x 5
+        # 1. Reshape to batch_size x grid_x x grid_y x 5
 
         grid_y, grid_x = tf.shape(inputs)[1:3]
-        n_anchors = self.n_anchors
 
-        inputs = tf.reshape(
-            inputs, (-1, grid_y, grid_x, n_anchors, 5 + self.num_classes)
-        )
+        inputs = tf.reshape(inputs, (-1, grid_y, grid_x, 5 + self.num_classes))
 
         # 2. Split to batch_size x grid_size x grid_size x num_anchors x 2
 
@@ -54,8 +49,8 @@ class YOLO_Head(tf.keras.Layer):
         grid_xs = tf.tile(tf.expand_dims(tf.range(grid_x), axis=0), [grid_y, 1])
         grid = tf.concat(
             [
-                grid_xs[:, :, tf.newaxis, tf.newaxis],
-                grid_ys[:, :, tf.newaxis, tf.newaxis],
+                grid_xs[:, :, tf.newaxis],
+                grid_ys[:, :, tf.newaxis],
             ],
             axis=-1,
         )
@@ -118,7 +113,6 @@ class YOLOv3_Tiny(tf.keras.Model):
     def __init__(
         self,
         n_classes,
-        n_anchors,
         model_size,
         max_output_size,
         iou_threshold,
@@ -126,7 +120,6 @@ class YOLOv3_Tiny(tf.keras.Model):
     ):
         super(YOLOv3_Tiny, self).__init__()
         self.n_classes = n_classes
-        self.n_anchors = n_anchors
         self.model_size = model_size
         self.max_output_size = max_output_size
         self.iou_threshold = iou_threshold
@@ -145,7 +138,7 @@ class YOLOv3_Tiny(tf.keras.Model):
         self.conv8 = ConvUnit(256, 1, "conv8", pool=False)
         self.conv9 = ConvUnit(512, 3, "conv9", pool=False)
         self.conv10 = ConvUnit(
-            self.n_anchors / 2 * (5 + self.num_classes),
+            5 + self.num_classes,
             1,
             "conv10",
             pool=False,
@@ -162,7 +155,7 @@ class YOLOv3_Tiny(tf.keras.Model):
 
         self.conv12 = ConvUnit(256, 3, "conv12", pool=False)
         self.conv13 = ConvUnit(
-            self.n_anchors / 2 * (5 + self.num_classes),
+            5 + self.num_classes,
             1,
             "conv13",
             activation="linear",
