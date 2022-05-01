@@ -1,7 +1,8 @@
 # YOLO
 
-Setting up environment, and getting the crowdhuman data
-Navigate to the `data` folder, then run the following command on the terminal:
+## Setting up environment, and getting the crowdhuman data
+Navigate to the `data` folder, then run the following command on the terminal: 
+Note: this script assumes that you have the correct set up for `python3` and `pip`. 
 ```
 bash get_data.sh
 ```
