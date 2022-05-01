@@ -1,5 +1,5 @@
-from concurrent.futures import process
 import sys
+from concurrent.futures import process
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -48,9 +48,7 @@ def main():
         assert x == y
 
         preprocess.parse_data_single(
-            raw_img_dir,
-            annotation_train_dir,
-            resized_one_file
+            raw_img_dir, annotation_train_dir, resized_one_file
         )
 
         # Visualize a single image

@@ -1,11 +1,11 @@
 import json
 import os
 from pathlib import Path
+from typing import Union
 
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from PIL import Image
-from typing import Union
 
 
 def get_batch(labels):
@@ -112,7 +112,9 @@ def parse_data(
     return output
 
 
-def parse_data_single(inputs_file_path, labels_file_path, resized_one_file, num_examples=100):
+def parse_data_single(
+    inputs_file_path, labels_file_path, resized_one_file, num_examples=100
+):
     """
     Parses data to create one .txt file for each image. Also resizes images to 256x256
     args:
@@ -133,9 +135,7 @@ def parse_data_single(inputs_file_path, labels_file_path, resized_one_file, num_
         # create a dictionary for the current image
         original_file = os.path.join(inputs_file_path, label["ID"] + ".jpg")
         # new file name for edited file
-        newpath = os.path.join(
-            resized_one_file, label["ID"] + "_256"
-        )
+        newpath = os.path.join(resized_one_file, label["ID"] + "_256")
         # resize image and get image shape
         try:
             image = Image.open(original_file)
