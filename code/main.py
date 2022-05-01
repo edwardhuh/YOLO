@@ -35,7 +35,7 @@ def main():
         ####
         assert raw_img_dir.exists()
 
-        # Step 1: resize all images to 256 * 256, store to `resize_img_dir`
+        # Step 1: resize all images to 416 * 416, store to `resize_img_dir`
         x = preprocess.parse_data(
             raw_img_dir,
             annotation_train_dir,

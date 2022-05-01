@@ -14,7 +14,7 @@ def get_batch(labels):
     args:
         labels: the annotations for the batch
     returns:
-        list of images corresponding to the labels, each (256x256x3)
+        list of images corresponding to the labels, each (416x416x3)
     """
     imgs = []
     for label in labels:
@@ -50,7 +50,7 @@ def parse_data(
         labels_file_path: the path to the folder holding associated labels
         num_examples: the number of images to process
     returns:
-        a list containing dictionaries with filepath and bounding box for each 256x256 image
+        a list containing dictionaries with filepath and bounding box for each 416x416 image
     """
     # First, load in the labels (annotations). They come in json format
     with open(labels_file_path, "r") as l:
@@ -70,7 +70,7 @@ def parse_data(
             # When the original file path does not exist, simply skip
             continue
         # new file name for edited file
-        curr["file"] = (Path(resized_img_dir) / f'{label["ID"]}_256.jpg').as_posix()
+        curr["file"] = (Path(resized_img_dir) / f'{label["ID"]}_416.jpg').as_posix()
 
         # resize image and get image shape
         try:
@@ -78,7 +78,7 @@ def parse_data(
         except FileNotFoundError:
             continue
         sz = image.size
-        img = image.resize([256, 256])
+        img = image.resize([416, 416])
         if save_data:
             img.save(curr["file"])  # save the cropped image
         boxes = []
@@ -116,7 +116,7 @@ def parse_data_single(
     inputs_file_path, labels_file_path, resized_one_file, num_examples=100
 ):
     """
-    Parses data to create one .txt file for each image. Also resizes images to 256x256
+    Parses data to create one .txt file for each image. Also resizes images to 416x416
     args:
         inputs_file_path: The path to the input .jpg
         labels_file_path: The path to the annotations file
@@ -135,14 +135,14 @@ def parse_data_single(
         # create a dictionary for the current image
         original_file = os.path.join(inputs_file_path, label["ID"] + ".jpg")
         # new file name for edited file
-        newpath = os.path.join(resized_one_file, label["ID"] + "_256")
+        newpath = os.path.join(resized_one_file, label["ID"] + "_416")
         # resize image and get image shape
         try:
             image = Image.open(original_file)
         except FileNotFoundError:
             continue
         sz = image.size
-        img = image.resize([256, 256])
+        img = image.resize([416, 416])
         if Path(newpath).parent.exists():
             img.save(newpath + ".jpg")  # save the cropped image
         boxes = []
