@@ -35,18 +35,22 @@ def main():
         ####
         assert raw_img_dir.exists()
 
+        # Step 1: resize all images to 256 * 256, store to `resize_img_dir`
         x = preprocess.parse_data(
             raw_img_dir,
             annotation_train_dir,
             resized_img_dir,
             save_data=True,
         )
+        # Step 2: read in processed json data
         y = preprocess.get_data(resized_img_dir / "annotations.json")
+
         assert x == y
 
         preprocess.parse_data_single(
-            Path(data_dir) / "images/Images",
-            Path(data_dir) / "annotation/annotation_train.odgt",
+            raw_img_dir,
+            annotation_train_dir,
+            resized_one_file
         )
 
         # Visualize a single image

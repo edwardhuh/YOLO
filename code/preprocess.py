@@ -112,7 +112,7 @@ def parse_data(
     return output
 
 
-def parse_data_single(inputs_file_path, labels_file_path, num_examples=100):
+def parse_data_single(inputs_file_path, labels_file_path, resized_one_file, num_examples=100):
     """
     Parses data to create one .txt file for each image. Also resizes images to 256x256
     args:
@@ -134,7 +134,7 @@ def parse_data_single(inputs_file_path, labels_file_path, num_examples=100):
         original_file = os.path.join(inputs_file_path, label["ID"] + ".jpg")
         # new file name for edited file
         newpath = os.path.join(
-            inputs_file_path, "resized_one_file", label["ID"] + "_256"
+            resized_one_file, label["ID"] + "_256"
         )
         # resize image and get image shape
         try:
