@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from PIL import Image
+from typing import Union
 
 
 def get_batch(labels):
@@ -34,7 +35,13 @@ def get_data(labels_file_path):
         return json.load(f)
 
 
-def parse_data(inputs_file_path, labels_file_path, num_examples=100, save_data=False):
+def parse_data(
+    inputs_file_path: Union[str, Path],
+    labels_file_path: Union[str, Path],
+    resized_img_dir: Union[str, Path],
+    num_examples: int = 100,
+    save_data: bool = False,
+):
     """
     Takes in file paths and returns the images and associated labels
 
@@ -58,14 +65,13 @@ def parse_data(inputs_file_path, labels_file_path, num_examples=100, save_data=F
         # create a dictionary for the current image
         curr = {}
         curr["ID"] = label["ID"]  # id of this example
-        original_file = os.path.join(inputs_file_path, label["ID"] + ".jpg")
+        original_file = (Path(inputs_file_path) / f'{label["ID"]}.jpg').as_posix()
         if not Path(original_file).exists():
-            # When the original file path does not exist
+            # When the original file path does not exist, simply skip
             continue
         # new file name for edited file
-        curr["file"] = os.path.join(
-            inputs_file_path, "resized", label["ID"] + "_256.jpg"
-        )
+        curr["file"] = (Path(resized_img_dir) / f'{label["ID"]}_256.jpg').as_posix()
+
         # resize image and get image shape
         try:
             image = Image.open(original_file)
@@ -101,9 +107,7 @@ def parse_data(inputs_file_path, labels_file_path, num_examples=100, save_data=F
         output.append(curr)
         i += 1
     if save_data:  # save the new annotation file
-        with open(
-            os.path.join(inputs_file_path, "resized", "annotations.json"), "w"
-        ) as f:
+        with open(Path(resized_img_dir) / "annotations.json", "w") as f:
             json.dump(output, f)
     return output
 
