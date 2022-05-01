@@ -7,3 +7,10 @@ Note: this script assumes that you have the correct set up for `python3` and `pi
 bash get_data.sh
 ```
 This script should automatically download the first 5000 image data from the Crowdhuman dataset in the `data/raw`, along with the relevant datasets in the correct directory structure.
+
+Then, proceed to the `main.py` for data processing and cleaning.
+
+## KMeans 
+
+
+## Model specification
