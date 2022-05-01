@@ -44,6 +44,6 @@ for f in CrowdHuman_train01.zip CrowdHuman_val.zip ; do
 done
 
 echo "** Create data file structure"
-mkdir -p $(dirname $0)/processed/resized
-mkdir -p $(dirname $0)/processed/resized_one_file
+mkdir ../processed/resized
+mkdir ../processed/resized_one_file
 
