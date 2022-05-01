@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from tf.keras.layers import (
+from tensorflow.keras.layers import (
     Conv2D,
     Concatenate,
     UpSampling2D,
@@ -10,8 +10,10 @@ from tf.keras.layers import (
     LeakyReLU,
 )
 
+GRID_SIZES = [13, 26]
 
-class YOLO_Head(tf.keras.Layer):
+
+class YOLO_Head(tf.keras.layers.Layer):
     """
     Implements the YOLOv3 head.
     """
@@ -21,11 +23,13 @@ class YOLO_Head(tf.keras.Layer):
     # 1 value for objectness score (between 0 and 1),
     # number-of-classes values for class score (between 0 and 1).
 
-    def __init__(self, num_classes, img_size, **kwargs):
+    def __init__(self, anchor_boxes, img_size, n_classes=1, **kwargs):
 
         super(YOLO_Head, self).__init__(**kwargs)
 
-        self.num_classes = num_classes
+        self.anchor_boxes = anchor_boxes
+        self.n_anchors = len(anchor_boxes)
+        self.n_classes = n_classes
         self.img_size = img_size
 
     def call(self, inputs, input_shape):
@@ -37,11 +41,16 @@ class YOLO_Head(tf.keras.Layer):
         # number-of-classes values for class score (between 0 and 1).
         """
 
-        # 1. Reshape to batch_size x grid_x x grid_y x 5
+        # 1. Reshape to batch_size x grid_x x grid_y x n_anchors x 6
 
+        anchors_tensor = tf.reshape(
+            tf.constant(self.anchor_boxes, tf.float32), [1, 1, 1, self.n_anchors, 2]
+        )
         grid_y, grid_x = tf.shape(inputs)[1:3]
 
-        inputs = tf.reshape(inputs, (-1, grid_y, grid_x, 5 + self.num_classes))
+        inputs = tf.reshape(
+            inputs, (-1, grid_y, grid_x, self.n_anchors, 5 + self.n_classes)
+        )
 
         # 2. Split to batch_size x grid_size x grid_size x num_anchors x 2
 
@@ -49,29 +58,32 @@ class YOLO_Head(tf.keras.Layer):
         grid_xs = tf.tile(tf.expand_dims(tf.range(grid_x), axis=0), [grid_y, 1])
         grid = tf.concat(
             [
-                grid_xs[:, :, tf.newaxis],
-                grid_ys[:, :, tf.newaxis],
+                grid_xs[:, :, tf.newaxis, tf.newaxis],
+                grid_ys[:, :, tf.newaxis, tf.newaxis],
             ],
             axis=-1,
         )
         grid = tf.cast(grid, tf.float32)
 
         # 3. Add center offset and scale with anchors
-        box_xy = (tf.math.sigmoid(inputs[..., :2]) + grid) / tf.cast(
+
+        # box center offsets
+        box_xy = (tf.math.sigmoid(inputs[..., :2]) + grid) / tf.convert_to_tensor(
             [grid_y, grid_x], tf.float32
         )
-        box_wh = (
-            tf.math.exp(inputs[..., 2:4])
-            * self.anchors
-            / tf.cast(input_shape, tf.float32)
+        # box width and height
+        box_wh = tf.math.exp(inputs[..., 2:4]) * (
+            anchors_tensor / tf.convert_to_tensor(input_shape[::-1], tf.float32)
         )
+        # objectness score
         box_confidence = tf.math.sigmoid(inputs[..., 4:5])
+        # class scores
         box_class_probs = tf.math.sigmoid(inputs[..., 5:])
 
         return box_xy, box_wh, box_confidence, box_class_probs
 
 
-class ConvUnit(tf.keras.Layer):
+class ConvUnit(tf.keras.layers.Layer):
     def __init__(
         self,
         filters,
@@ -112,16 +124,15 @@ class ConvUnit(tf.keras.Layer):
 class YOLOv3_Tiny(tf.keras.Model):
     def __init__(
         self,
-        n_classes,
-        model_size,
-        max_output_size,
+        anchors,
         iou_threshold,
         score_threshold,
+        n_classes=1,
     ):
         super(YOLOv3_Tiny, self).__init__()
         self.n_classes = n_classes
-        self.model_size = model_size
-        self.max_output_size = max_output_size
+        self.anchors = anchors
+        self.n_anchors = len(anchors)
         self.iou_threshold = iou_threshold
         self.score_threshold = score_threshold
 
@@ -129,42 +140,47 @@ class YOLOv3_Tiny(tf.keras.Model):
         self.conv2 = ConvUnit(32, 3, "conv2")
         self.conv3 = ConvUnit(64, 3, "conv3")
         self.conv4 = ConvUnit(128, 3, "conv4")
-        self.conv5 = ConvUnit(256, 3, "conv5")
+        self.conv5 = ConvUnit(256, 3, "conv5", pool=False)
+
+        self.pool = MaxPooling2D(2, 2, padding="SAME")
         self.conv6 = ConvUnit(512, 3, "conv6", pool_strides=1)
         self.conv7 = ConvUnit(1024, 3, "conv7", pool=False)
-
-        ######
-
         self.conv8 = ConvUnit(256, 1, "conv8", pool=False)
+
         self.conv9 = ConvUnit(512, 3, "conv9", pool=False)
         self.conv10 = ConvUnit(
-            5 + self.num_classes,
+            (self.n_anchors // 2) * (5 + self.n_classes),
             1,
             "conv10",
             pool=False,
             activation="linear",
         )
 
-        ######
-        self.concat = Concatenate(axis=-1)
+        self.yolo_head_1 = YOLO_Head(
+            self.anchors[0:3], img_size=(416, 416), n_classes=self.n_classes
+        )
 
-        ### TODO: Insert first YOLO_Head here
+        ######
+
+        self.concat = Concatenate(axis=-1)
 
         self.conv11 = ConvUnit(128, 1, "conv11", pool=False)
         self.upsample1 = UpSampling2D(2)
 
         self.conv12 = ConvUnit(256, 3, "conv12", pool=False)
         self.conv13 = ConvUnit(
-            5 + self.num_classes,
+            (self.n_anchors // 2) * (5 + self.n_classes),
             1,
             "conv13",
             activation="linear",
             pool=False,
         )
 
-        ######
+        self.yolo_head_2 = YOLO_Head(
+            self.anchors[3:], img_size=(416, 416), n_classes=self.n_classes
+        )
 
-        ### TODO: Insert second YOLO_Head here
+        ######
 
     def __call__(self, inputs):
 
@@ -174,12 +190,14 @@ class YOLOv3_Tiny(tf.keras.Model):
         x1 = self.conv4(x1)
         x1 = self.conv5(x1)
 
-        x2 = self.conv6(x1)
+        x2 = self.pool(x1)
+        x2 = self.conv6(x2)
         x2 = self.conv7(x2)
         x2 = self.conv8(x2)
 
         y1 = self.conv9(x2)
         y1 = self.conv10(y1)
+        y1 = self.yolo_head_1(y1, input_shape=[416, 416])
 
         ######
 
@@ -189,7 +207,29 @@ class YOLOv3_Tiny(tf.keras.Model):
         x3 = self.concat([x2, x1])
         y2 = self.conv12(x3)
         y2 = self.conv13(y2)
+        y2 = self.yolo_head_2(y2, input_shape=[416, 416])
 
         ######
 
         return y1, y2
+
+
+if __name__ == "__main__":
+
+    anchors = [
+        [10, 13],
+        [16, 30],
+        [33, 23],
+        [30, 61],
+        [62, 45],
+        [59, 119],
+    ]
+
+    model = YOLOv3_Tiny(anchors, 0.5, 0.5, 1)
+    model.compile()
+
+    test = tf.random.uniform((1, 416, 416, 3))
+    y1, y2 = model(test)
+
+    print(y1[0].shape)
+    print(y2[0].shape)

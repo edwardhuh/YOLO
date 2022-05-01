@@ -1,8 +1,10 @@
 import numpy as np
 import tensorflow as tf
 
+GRID_SIZES = [13, 26]
 
-def correct_ground_truths(ground_truths, grid_sizes):
+
+def correct_ground_truths(ground_truths, anchor_boxes, grid_sizes=GRID_SIZES):
     """
     Processes the ground truths into the same shape as the outputs of YOLO head
 
@@ -19,26 +21,66 @@ def correct_ground_truths(ground_truths, grid_sizes):
     grid_sizes: a list of the grid sizes at different scales of the model outputs
 
     returns:
-        a list of tensors of shapes (m, grid_y, grid_x, 6)
+        a list of tensors of shapes (m, grid_y, grid_x, n_anFchors, 6), each corresponding to a different scale
     """
 
-    m = ground_truths.shape[0]
+    batch_size = ground_truths.shape[0]
+    n_bounding_boxes = ground_truths.shape[1]
+    n_anchors = len(anchor_boxes) // 2
+    anchor_boxes = np.array(anchor_boxes).reshape(-1, n_anchors, 2)
 
     outputs = []
 
-    for grid_size in grid_sizes:
+    for grid_size, anchors in zip(grid_sizes, anchor_boxes):
 
-        output_tensor = np.zeros([m, grid_size, grid_size, 6], dtype=np.float32)
+        output_tensor = np.zeros(
+            [batch_size, grid_size, grid_size, n_anchors, 6], dtype=np.float32
+        )
         cell_size = 1.0 / grid_size
 
-        for i in range(m):
-            for j in range(ground_truths.shape[1]):
+        anchors = np.tile(anchors / 416, (batch_size, n_bounding_boxes, 1, 1))
+        intersect_mins = np.maximum(
+            np.expand_dims(ground_truths[:, :, 2:4], axis=2), anchors
+        )
+        intersect_maxes = np.minimum(
+            np.expand_dims(ground_truths[:, :, 2:4], axis=2), anchors
+        )
+        intersect_wh = np.maximum(intersect_maxes - intersect_mins, 0.0)
+        intersect_area = intersect_wh[..., 0] * intersect_wh[..., 1]
+        box_area = ground_truths[:, :, 2] * ground_truths[:, :, 3]
+        anchor_area = anchors[..., 0] * anchors[..., 1]
+        iou = intersect_area / (box_area + anchor_area - intersect_area + 1e-10)
+
+        best_anchor = np.argmax(iou, axis=-1)
+
+        # the downside of doing this is if there are multiple ground boxes in the same cell, the ground truth will be overwritten
+
+        for i in range(batch_size):
+            for j in range(n_bounding_boxes):
                 grid_x = int(ground_truths[i, j, 0] // cell_size)
                 grid_y = int(ground_truths[i, j, 1] // cell_size)
 
-                output_tensor[grid_y, grid_x, :] = ground_truths[i, j, :]
-                output_tensor[grid_y, grid_x, 4:] = 1.0
+                output_tensor[i, grid_y, grid_x, best_anchor[j], :4] = ground_truths[
+                    i,
+                    j,
+                ]
+                output_tensor[i, grid_y, grid_x, best_anchor[j], 4:] = 1.0
 
         outputs.append(output_tensor)
 
     return outputs
+
+
+if __name__ == "__main__":
+    ground_truths = np.array([[[0, 0, 0.5, 0.5]]])
+    anchor_boxes = [
+        [216, 216],
+        [16, 30],
+        [33, 23],
+        [30, 61],
+        [62, 45],
+        [59, 119],
+    ]
+
+    outputs = correct_ground_truths(ground_truths, anchor_boxes)
+    assert outputs[0, 0, 0, 0, 4] == 1.0
