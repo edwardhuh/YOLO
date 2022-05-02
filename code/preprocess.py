@@ -169,9 +169,7 @@ def parse_data_single(
         # add boxes to current dict and current dict to list of dicts
         with open(newpath + ".txt", "w") as f:
             for box in boxes:
-                for item in box:
-                    f.write(str(item) + ",")
-                f.write("\n")
+                f.write(",".join(map(str, box)) + "\n")
         i += 1
 
 
