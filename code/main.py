@@ -8,6 +8,8 @@ import tensorflow as tf
 from kmeans import get_kmeans
 from visualize_boxes import visualize
 
+from model.process_ground_truths import correct_ground_truths
+
 
 def main():
     if len(sys.argv) != 2:
@@ -48,7 +50,7 @@ def main():
         # )
 
         # Step 2: read in processed json data
-        # y = preprocess.get_data(resized_img_dir / "annotations.json")
+        y = preprocess.get_data(resized_img_dir / "annotations.json")
 
         
 
@@ -57,13 +59,21 @@ def main():
         # img = tf.keras.preprocessing.image.array_to_img(z)
         # plt.imshow(img)
         # visualize(filepath=y[0]["file"], bounding_boxes=y[0]["boxes"], found_boxes=[])
-
+    
+    # Step 3 compute kmeans
     # Get KMeans (defaulting to 3 anchor boxes)
-    centers = get_kmeans(
+    anchor_boxes = get_kmeans(
         resized_one_file_dir=resized_one_file_dir,
         annotation_filename=annotation_train_dir,
     )
-    centers
+    anchor_boxes = [
+        [216, 216],
+        [16, 30],
+        [33, 23],
+        [30, 61],
+        [62, 45],
+        [59, 119],
+    ]
     
     ## Apply loss function
 

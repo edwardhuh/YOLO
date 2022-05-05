@@ -1,3 +1,6 @@
+"""
+Utility function for visualizing individual bounding boxes
+"""
 from PIL import Image, ImageDraw
 
 
@@ -17,9 +20,3 @@ def visualize(filepath, bounding_boxes, found_boxes):
     img.show()
 
 
-# if __name__ == "__main__":
-#     visualize(
-#         "../data/images/CrowdHuman_train01/Images/resized/273275,cd061000af95f691_256.jpg",
-#         [[0.495, 0.49166666666666664, 0.041666666666666664, 0.05625]],
-#         [],
-#     )

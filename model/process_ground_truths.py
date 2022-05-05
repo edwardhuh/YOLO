@@ -76,7 +76,7 @@ def correct_ground_truths(
 
 
 if __name__ == "__main__":
-    ground_truths = np.array([[0, 0, 0.5, 0.5]])
+    ground_truths = np.array([[0.25, 0.25, 0.25, 0.25],[0, 0, 0.5, 0.5]])
     anchor_boxes = [
         [216, 216],
         [16, 30],

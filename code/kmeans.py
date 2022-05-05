@@ -6,7 +6,7 @@ are the coordinates of the lower left corner and the x1, y1 are the coordinates 
 We need to extract the width and height from these coordinates, 
 and normalize data with respect to image width and height.
 
-However, after preprocessing, we will always have the same image size for all images; 256 * 256.
+However, after preprocessing, we will always have the same image size for all images; 416 * 416.
 """
 
 import json
