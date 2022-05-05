@@ -3,7 +3,7 @@ import numpy as np
 
 from model.model import YOLO_Head
 
-def compute_iou(pred_box:list(float), true_box:list(float)):
+def compute_iou(pred_box:tf.Tensor, true_box:tf.Tensor):
     """
     Compute the IOU between two boxes
     """
