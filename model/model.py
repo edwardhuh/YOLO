@@ -10,6 +10,8 @@ from tensorflow.keras.layers import (
     LeakyReLU,
 )
 
+from utils import correct_ground_truths
+
 GRID_SIZES = [13, 26]
 
 
@@ -23,16 +25,24 @@ class YOLO_Head(tf.keras.layers.Layer):
     # 1 value for objectness score (between 0 and 1),
     # number-of-classes values for class score (between 0 and 1).
 
-    def __init__(self, anchor_boxes, img_size, n_classes=1, **kwargs):
+    def __init__(self, anchor_boxes, n_classes=1, **kwargs):
+        """
+        Initializes the YOLOv3 head.
+
+        Parameters
+        ----------
+        anchor_boxes : a list of 3 anchor boxes, in absolute scale relative to 416
+            (width and height)
+        n_classes : number of classes to predict
+        """
 
         super(YOLO_Head, self).__init__(**kwargs)
 
         self.anchor_boxes = anchor_boxes
         self.n_anchors = len(anchor_boxes)
         self.n_classes = n_classes
-        self.img_size = img_size
 
-    def call(self, inputs, input_shape):
+    def call(self, inputs, input_shape, train=True):
         """Reshapes `inputs` into final YOLO output format:
 
         # 2 values for box center offsets(in x an y, relative to cell center),
@@ -80,6 +90,8 @@ class YOLO_Head(tf.keras.layers.Layer):
         # class scores
         box_class_probs = tf.math.sigmoid(inputs[..., 5:])
 
+        if train:
+            return inputs, box_confidence, box_class_probs
         return box_xy, box_wh, box_confidence, box_class_probs
 
 
@@ -156,9 +168,7 @@ class YOLOv3_Tiny(tf.keras.Model):
             activation="linear",
         )
 
-        self.yolo_head_1 = YOLO_Head(
-            self.anchors[0:3], img_size=(416, 416), n_classes=self.n_classes
-        )
+        self.yolo_head_1 = YOLO_Head(self.anchors[0:3], n_classes=self.n_classes)
 
         ######
 
@@ -176,13 +186,11 @@ class YOLOv3_Tiny(tf.keras.Model):
             pool=False,
         )
 
-        self.yolo_head_2 = YOLO_Head(
-            self.anchors[3:], img_size=(416, 416), n_classes=self.n_classes
-        )
+        self.yolo_head_2 = YOLO_Head(self.anchors[3:], n_classes=self.n_classes)
 
         ######
 
-    def __call__(self, inputs):
+    def __call__(self, inputs, train=True):
 
         x1 = self.conv1(inputs)
         x1 = self.conv2(x1)
@@ -197,7 +205,7 @@ class YOLOv3_Tiny(tf.keras.Model):
 
         y1 = self.conv9(x2)
         y1 = self.conv10(y1)
-        y1 = self.yolo_head_1(y1, input_shape=[416, 416])
+        y1 = self.yolo_head_1(y1, input_shape=[416, 416], train=train)
 
         ######
 
@@ -207,11 +215,36 @@ class YOLOv3_Tiny(tf.keras.Model):
         x3 = self.concat([x2, x1])
         y2 = self.conv12(x3)
         y2 = self.conv13(y2)
-        y2 = self.yolo_head_2(y2, input_shape=[416, 416])
+        y2 = self.yolo_head_2(y2, input_shape=[416, 416], train=train)
 
         ######
 
         return y1, y2
+
+    @tf.function
+    def train_step(self, data):
+
+        imgs, boxes = data
+        y_true = correct_ground_truths(boxes, GRID_SIZES, self.anchors)
+
+        with tf.GradientTape() as tape:
+            y_pred = self(imgs)
+            loss = self.compiled_loss(y_true, y_pred)
+        gradients = tape.gradient(loss, self.trainable_variables)
+        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+
+        return loss
+
+    @tf.function
+    def test_step(self, data):
+
+        imgs, boxes = data
+        y_true = correct_ground_truths(boxes, GRID_SIZES, self.anchors)
+
+        y_pred = self(imgs)
+        loss = self.compiled_loss(y_true, y_pred)
+
+        return loss
 
 
 if __name__ == "__main__":
@@ -226,7 +259,10 @@ if __name__ == "__main__":
     ]
 
     model = YOLOv3_Tiny(anchors, 0.5, 0.5, 1)
-    model.compile()
+    model.compile(
+        optimizer=Adam(1e-3),
+        loss=yolov3_loss(anchors, 1),
+    )
 
     test = tf.random.uniform((1, 416, 416, 3))
     y1, y2 = model(test)
