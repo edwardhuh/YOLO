@@ -6,11 +6,9 @@ from code.loss import compute_iou
 
 def average_precision(true_boxes:tf.Tensor, pred_boxes:tf.Tensor, threshold=0.5):
     iou = compute_iou(pred_boxes, true_boxes)
-    # hits = np.nonzero(iou >= threshold)  # number of true positives
-    # total_positives = np.nonzero(iou > 0)
+    hits = np.nonzero(iou >= threshold)  # number of true positives
+    total_positives = np.nonzero(iou > 0)
     # precision is true positives / total positives
     precision = hits / total_positives
-    # recall is true positives over total number of actual boxes
-    recall = hits / len(true_boxes)
     
-
+    return tf.reduce_mean(precision)
