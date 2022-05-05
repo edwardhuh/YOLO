@@ -34,28 +34,29 @@ def main():
         resized_one_file_dir = processed_data_dir / "resized_one_file"
         ####
         assert raw_img_dir.exists()
+        
+        # Step 1-1: resize all images to 416 * 416, store to `resize_img_dir`
+        # preprocess.parse_data(
+        #     raw_img_dir,
+        #     annotation_train_dir,
+        #     resized_img_dir,
+        #     save_data=True,
+        # )
+        # Step 1-2: resize all images to 416 * 416, store inidividual bounding boxes
+        # preprocess.parse_data_single(
+        #     raw_img_dir, annotation_train_dir, resized_one_file_dir
+        # )
 
-        # Step 1: resize all images to 416 * 416, store to `resize_img_dir`
-        x = preprocess.parse_data(
-            raw_img_dir,
-            annotation_train_dir,
-            resized_img_dir,
-            save_data=True,
-        )
         # Step 2: read in processed json data
-        y = preprocess.get_data(resized_img_dir / "annotations.json")
+        # y = preprocess.get_data(resized_img_dir / "annotations.json")
 
-        assert x == y
-
-        preprocess.parse_data_single(
-            raw_img_dir, annotation_train_dir, resized_one_file_dir
-        )
+        
 
         # Visualize a single image
-        batch = preprocess.get_batch(y)
+        # batch = preprocess.get_batch(y)
         # img = tf.keras.preprocessing.image.array_to_img(z)
         # plt.imshow(img)
-        visualize(filepath=y[0]["file"], bounding_boxes=y[0]["boxes"], found_boxes=[])
+        # visualize(filepath=y[0]["file"], bounding_boxes=y[0]["boxes"], found_boxes=[])
 
     # Get KMeans (defaulting to 3 anchor boxes)
     centers = get_kmeans(
@@ -64,6 +65,7 @@ def main():
     )
     centers
     
+    ## Apply loss function
 
     return None
 

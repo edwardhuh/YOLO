@@ -26,7 +26,7 @@ K_MEANS_CLUSTERS = 3
 
 def get_anchor_boxes(ID, resized_one_file_dir, BBOX_WHS):
     assert resized_one_file_dir is not None
-    bbox_path = Path(resized_one_file_dir) / f"{ID}_256.txt"
+    bbox_path = Path(resized_one_file_dir) / f"{ID}_416.txt"
     if bbox_path.exists():
         with open(bbox_path, "r") as bboxes:
             for bbox in bboxes.readlines():

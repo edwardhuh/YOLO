@@ -39,7 +39,8 @@ def parse_data(
     inputs_file_path: Union[str, Path],
     labels_file_path: Union[str, Path],
     resized_img_dir: Union[str, Path],
-    num_examples: int = 100,
+    testing:bool = True,
+    # num_examples: int = 100,
     save_data: bool = False,
 ):
     """
@@ -48,14 +49,19 @@ def parse_data(
     args:
         inputs_file_path: the path to the folder holding the images
         labels_file_path: the path to the folder holding associated labels
-        num_examples: the number of images to process
+        testing: use smaller sample when testing function
     returns:
         a list containing dictionaries with filepath and bounding box for each 416x416 image
     """
     # First, load in the labels (annotations). They come in json format
     with open(labels_file_path, "r") as l:
         labels = [json.loads(line.strip()) for line in l.readlines()]
-
+    if testing:
+        num_examples = 100
+    else:
+        # otherwise, we want to use all 5_000
+        num_examples = 5_000
+        
     output = []
     i = 0
     for label in labels:
