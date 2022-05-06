@@ -8,7 +8,6 @@ import tensorflow as tf
 from kmeans import get_kmeans
 from visualize_boxes import visualize
 
-# from model.utils import correct_ground_truths
 
 
 def main():

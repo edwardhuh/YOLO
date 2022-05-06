@@ -1,15 +1,7 @@
 import numpy as np
 import tensorflow as tf
-
-from tensorflow.keras.layers import (
-    Conv2D,
-    Concatenate,
-    UpSampling2D,
-    MaxPooling2D,
-    BatchNormalization,
-    LeakyReLU,
-)
-
+from tensorflow.keras.layers import (BatchNormalization, Concatenate, Conv2D,
+                                     LeakyReLU, MaxPooling2D, UpSampling2D)
 from utils import correct_ground_truths
 
 GRID_SIZES = [13, 26]

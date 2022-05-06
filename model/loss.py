@@ -3,6 +3,7 @@ import tensorflow as tf
 from typing import List
 
 
+
 def compute_iou(pred_box: tf.Tensor, true_box: tf.Tensor):
     """
     Compute the IOU between two boxes
@@ -50,6 +51,7 @@ def compute_iou_for_loss(pred_box: tf.Tensor, true_box: tf.Tensor):
     pred_box_area = pred_box_wh[..., 0] * pred_box_wh[..., 1]
     true_box_area = true_box_wh[..., 0] * true_box_wh[..., 1]
     return intersect_area / (true_box_area + pred_box_area - intersect_area)
+
 
 
 def calc_scale(alpha, targets, preds, gamma):

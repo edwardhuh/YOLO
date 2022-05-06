@@ -3,12 +3,14 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
+from utils import CustomModelSaver, parse_args
 
 from model import YOLOv3_Tiny, YOLO_Head, anchor_boxes
 from utils import correct_ground_truths, CustomModelSaver, parse_args
 from loss import compute_loss
+
 
 MAX_BB_NUM = 179
 GRID_SIZES = [13, 26]
