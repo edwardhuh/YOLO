@@ -18,5 +18,3 @@ def visualize(filepath, bounding_boxes, found_boxes):
         # continue
         Drawer.rectangle([i * 416 for i in box], fill=None, outline="red")
     img.show()
-
-

@@ -3,11 +3,11 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
+from utils import CustomModelSaver, parse_args
 
 from model import YOLOv3_Tiny
-from utils import CustomModelSaver, parse_args
 
 MAX_BB_NUM = 179
 GRID_SIZES = [13, 26]

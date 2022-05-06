@@ -39,7 +39,7 @@ def parse_data(
     inputs_file_path: Union[str, Path],
     labels_file_path: Union[str, Path],
     resized_img_dir: Union[str, Path],
-    testing:bool = True,
+    testing: bool = True,
     # num_examples: int = 100,
     save_data: bool = False,
 ):
@@ -61,7 +61,7 @@ def parse_data(
     else:
         # otherwise, we want to use all 5_000
         num_examples = 5_000
-        
+
     output = []
     i = 0
     for label in labels:
