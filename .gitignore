@@ -131,3 +131,9 @@ dmypy.json
 
 data/
 data/*
+
+model/checkpoints/*
+model/checkpoints
+
+model/logs/*
+model/logs

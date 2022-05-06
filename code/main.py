@@ -8,7 +8,6 @@ import tensorflow as tf
 from kmeans import get_kmeans
 from visualize_boxes import visualize
 
-# from model.process_ground_truths import correct_ground_truths
 
 
 def main():
@@ -45,9 +44,9 @@ def main():
         #     save_data=True,
         # )
         # Step 1-2: resize all images to 416 * 416, store inidividual bounding boxes
-        # preprocess.parse_data_single(
-        #     raw_img_dir, annotation_train_dir, resized_one_file_dir
-        # )
+        preprocess.parse_data_single(
+            raw_img_dir, annotation_train_dir, resized_one_file_dir
+        )
 
         # Step 2: read in processed json data
         y = preprocess.get_data(resized_img_dir / "annotations.json")
