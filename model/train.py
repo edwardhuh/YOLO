@@ -22,7 +22,8 @@ def process_image(img_path):
 
 
 def process_txt(txt_path):
-    txt = tf.io.read_file(txt_path)
+    print(txt_path)
+    txt = tf.io.read_file(txt_path, "utf-8")
     txt = tf.strings.to_number(tf.strings.split(txt, ","), tf.float32)
     txt = tf.reshape(txt, (-1, 4))
     if tf.shape(txt)[0] < MAX_BB_NUM:
@@ -45,7 +46,7 @@ label_dataset_train = tf.data.Dataset.list_files(
 ds = tf.data.Dataset.zip((image_dataset_train, label_dataset_train))
 
 ds_train = (
-    ds.take(4000)
+    ds.take(100)
     .shuffle(buffer_size=1000)
     .cache()
     .prefetch(buffer_size=tf.data.AUTOTUNE)
