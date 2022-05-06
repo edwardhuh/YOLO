@@ -1,3 +1,6 @@
+import argparse
+import os
+import re
 import numpy as np
 import tensorflow as tf
 
@@ -89,14 +92,6 @@ if __name__ == "__main__":
     ground_truths = tf.convert_to_tensor(
         [[[0, 0, 0.5, 0.5], [0, 0, 0, 0]]], dtype=tf.float32
     )
-    anchor_boxes = [
-        [216, 216],
-        [16, 30],
-        [33, 23],
-        [30, 61],
-        [62, 45],
-        [59, 119],
-    ]
 
     outputs = correct_ground_truths(ground_truths, GRID_SIZES, anchor_boxes)
     assert outputs[0][0, 0, 0, 0, 4] == 1.0
