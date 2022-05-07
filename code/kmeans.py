@@ -91,7 +91,7 @@ def get_kmeans(
     X = np.array(BBOX_WHS)
     # This visualization helps us understand that the KMeans is primarily very narrow,
     # and it is often a problem of scale.
-    graph_clusters(X)
+    # graph_clusters(X)
 
     rows = len(X)
 
@@ -115,26 +115,27 @@ def get_kmeans(
         for cluster in range(cluster_num):
             clusters[cluster] = dist(X[nearest_clusters == cluster], axis=0)
         last_cluster = nearest_clusters
-        
-        # Step 3: Visualize
-        current_palette = list(sns.xkcd_rgb.values())
-        WithinClusterMeanDist = np.mean(distances[np.arange(distances.shape[0]),nearest_clusters])
+    
+    # Step 3: Visualization
+    current_palette = list(sns.xkcd_rgb.values())
+    WithinClusterMeanDist = np.mean(distances[np.arange(distances.shape[0]),nearest_clusters])
 
-        for icluster in np.unique(nearest_clusters):
+    # Code for generating kmeans cluster graph
+    for icluster in np.unique(nearest_clusters):
 
-            pick = nearest_clusters==icluster
-            c = current_palette[icluster]
-            plt.rc('font', size=8) 
-            plt.plot(X[pick,0],X[pick,1],"p",
-                    color=c,
-                    alpha=0.5,label="cluster = {}, N = {:6.0f}".format(icluster,np.sum(pick)))
-            plt.text(clusters[icluster,0],
-                    clusters[icluster,1],
-                    "c{}".format(icluster),
-                    fontsize=10,color="red")
-            plt.title("Clusters")
-            plt.xlabel("width")
-            plt.ylabel("height")
-            plt.legend(title="Mean IoU = {:5.4f}".format(WithinClusterMeanDist))  
-        
+        pick = nearest_clusters==icluster
+        c = current_palette[icluster]
+        plt.rc('font', size=8) 
+        plt.plot(X[pick,0],X[pick,1],"p",
+                color=c,
+                alpha=0.5,label="cluster = {}, N = {:6.0f}".format(icluster,np.sum(pick)))
+        # plt.text(clusters[icluster,0],
+        #         clusters[icluster,1],
+        #         "c{}".format(icluster),
+        #         fontsize=20,color="red")
+        plt.title("Clusters")
+        plt.xlabel("width")
+        plt.ylabel("height")
+        plt.legend(title="Mean IoU = {:5.4f}".format(WithinClusterMeanDist))  
+        plt.savefig('anchor_box_vis.png')
     return clusters, nearest_clusters, distances

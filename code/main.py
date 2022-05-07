@@ -9,7 +9,7 @@ from kmeans import get_kmeans
 from visualize_boxes import visualize
 import numpy as np
 
-
+import json
 
 def main():
     if len(sys.argv) != 2:
@@ -66,9 +66,15 @@ def main():
         annotation_filename=annotation_train_dir,
         cluster_num=6
     )
-    
+    clusters
+    with open('anchor_boxes.txt', 'w') as txt_file:
+        json.dump(clusters.toList(), txt_file)
+        for row in clusters:
+            txt_file.write("".join(str(row))+'\n')
 
     
+
+
     
 
     return None
