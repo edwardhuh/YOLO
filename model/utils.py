@@ -173,7 +173,15 @@ def correct_boxes_and_scores(
         box_mins = box_yx - (box_hw / 2.0)
         box_maxes = box_yx + (box_hw / 2.0)
 
-        boxes_tensor = tf.concat([box_mins, box_maxes], axis=-1)
+        boxes_tensor = tf.concat(
+            [
+                box_mins[..., 0:1],  # y_min
+                box_mins[..., 1:2],  # x_min
+                box_maxes[..., 0:1],  # y_max
+                box_maxes[..., 1:2],  # x_max
+            ],
+            axis=-1,
+        )
         box_scores_tensor = box_confidence * box_class_probs
 
         for boxes, box_scores in zip(

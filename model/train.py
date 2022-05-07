@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
     if ARGS.load_checkpoint is not None:
         ARGS.load_checkpoint = Path(ARGS.load_checkpoint)
-        if not ARGS.checkpoint.exists():
+        if not ARGS.load_checkpoint.exists():
             raise FileNotFoundError(f"Checkpoint {ARGS.load_checkpoint} not found")
 
         checkpoint_dir = ARGS.load_checkpoint.parent
@@ -116,7 +116,7 @@ if __name__ == "__main__":
 
         # train the model
 
-        steps = 0
+        steps = 1
         for imgs, boxes in ds_train:
 
             y_true = correct_ground_truths(boxes, GRID_SIZES, anchor_boxes)
@@ -139,27 +139,38 @@ if __name__ == "__main__":
             y_pred = model(imgs, train=False)
             boxes_list, scores_list = correct_boxes_and_scores(y_pred)
 
-            for i, (pred_boxes, scores, ground_truth_boxes) in enumerate(
+            for i, (raw_boxes, raw_scores, ground_truth_boxes) in enumerate(
                 zip(boxes_list, scores_list, tf.unstack(true_boxes))
             ):
-                pred_boxes, scores = non_max_suppression(pred_boxes, scores, 100, 0.5)
-                scores_sorted = tf.argsort(scores, direction="DESCENDING")
-                boxes = tf.gather(boxes, scores_sorted, axis=0)
-                scores = tf.gather(scores, scores_sorted)
+                pred_boxes, scores = non_max_suppression(
+                    raw_boxes, raw_scores, 100, 0.5
+                )
+                pred_boxes = tf.gather(
+                    pred_boxes,
+                    tf.constant([1, 0, 3, 2], dtype=tf.int32),
+                    axis=1,
+                )  # xmin, ymin, xmax, ymax
+                scores_sorted_ind = tf.argsort(scores, direction="DESCENDING")
+                pred_boxes = tf.gather(pred_boxes, scores_sorted_ind, axis=0)
+                pred_scores = tf.gather(scores, scores_sorted_ind)
 
                 ground_truth_boxes = tf.boolean_mask(
                     ground_truth_boxes, tf.reduce_sum(ground_truth_boxes, axis=1) > 0.0
                 )
 
-                true_pos, false_pos = precision(true_boxes=boxes, pred_boxes=boxes)
+                true_pos, false_pos = precision(
+                    true_boxes=ground_truth_boxes,
+                    pred_boxes=pred_boxes,
+                    preprocess_true=True,
+                )
                 precisions.append([true_pos, false_pos])
 
-        precisions = tf.constant(np.array(precisions), dtype=tf.float32)
-        tp = tf.reduce_mean(precisions[:, 0])
-        fp = tf.reduce_mean(precisions[:, 1])
+        precisions = np.array(precisions)
+        tp = np.sum(precisions[:, 0])
+        fp = np.sum(precisions[:, 1])
         ap = tp / (tp + fp + 1e-10)
 
-        metrics.update({"AP": ap.numpy()})
+        metrics.update({"AP": ap, "TP": tp, "FP": fp})
 
         pbar.update(steps, values=metrics.items(), finalize=True)
 
@@ -167,7 +178,7 @@ if __name__ == "__main__":
             checkpoint_dir
         )
 
-        cur_acc = ap.numpy()
+        cur_acc = ap
 
         # Only save weights if test accuracy exceeds the previous best
         # weight file

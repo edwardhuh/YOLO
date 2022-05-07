@@ -25,7 +25,11 @@ def compute_iou(
         pred_box_max = pred_box_xy + pred_box_wh / 2
     else:
         pred_box_min = pred_box_xy
-        pred_box_max = pred_box_xy
+        pred_box_max = pred_box_wh
+        pred_box_wh = pred_box_max - pred_box_min
+
+    if expand_dims:
+        true_box = tf.expand_dims(true_box, axis=-0)
 
     true_box_xy = true_box[..., 0:2]
     true_box_wh = true_box[..., 2:4]
@@ -34,10 +38,8 @@ def compute_iou(
         true_box_max = true_box_xy + true_box_wh / 2
     else:
         true_box_min = true_box_xy
-        true_box_max = true_box_xy
-
-    if expand_dims:
-        true_box = tf.expand_dims(true_box, axis=-0)
+        true_box_max = true_box_wh
+        true_box_wh = true_box_max - true_box_min
 
     intersect_mins = tf.maximum(pred_box_min, true_box_min)
     intersect_max = tf.minimum(pred_box_max, true_box_max)
@@ -201,7 +203,7 @@ def compute_loss(
         results[f"xy_{l}"] = xy_loss.numpy()
         results[f"wh_{l}"] = wh_loss.numpy()
         results[f"cf_{l}"] = conf_loss.numpy()
-        results[f"cl_{l}"] = class_loss.numpy()
+        # results[f"cl_{l}"] = class_loss.numpy() not showing class loss because we know it's going to be very small
 
         overall_loss += total_loss
     results["loss"] = overall_loss.numpy()
