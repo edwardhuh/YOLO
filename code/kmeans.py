@@ -20,6 +20,8 @@ import numpy as np
 from sklearn import cluster
 from sklearn.cluster import KMeans
 
+import seaborn as sns
+    
 # hyperparameter determining the number of kmeans
 # this corresponds to the number of anchor boxes in YOLOv3
 K_MEANS_CLUSTERS = 3
@@ -71,6 +73,7 @@ def get_kmeans(
     resized_one_file_dir,
     annotation_filename="raw/annotation_val.odgt",
     cluster_num=6,
+    dist=np.median,
     seed=1470,
 ):
     # initializing BBOX list for kmeans
@@ -97,9 +100,41 @@ def get_kmeans(
 
     np.random.seed(seed)
     # initialize the cluster centers to be k items
-    cluster = X[np.random.choice(rows, k, replace=False)]
-    
-    # kmeans = KMeans(n_clusters=K_MEANS_CLUSTERS, random_state=0).fit(X)
-    # centers = kmeans.cluster_centers_
-    # centers = centers[centers[:, 0].argsort()]  # sort by bbox w
-    # return centers
+    clusters = X[np.random.choice(rows, cluster_num, replace=False)]
+
+    while True:
+        # Step 1: allocate each item to the closest cluster centers
+        for icluster in range(cluster_num):
+            distances[:, icluster] = 1 - iou(clusters[icluster], X)
+        nearest_clusters = np.argmin(distances, axis = 1)
+
+        if(last_cluster == nearest_clusters).all():
+            break
+
+        # Step 2: calculate the cluster centers as mean (or median) of all the cases in the clusters.
+        for cluster in range(cluster_num):
+            clusters[cluster] = dist(X[nearest_clusters == cluster], axis=0)
+        last_cluster = nearest_clusters
+        
+        # Step 3: Visualize
+        current_palette = list(sns.xkcd_rgb.values())
+        WithinClusterMeanDist = np.mean(distances[np.arange(distances.shape[0]),nearest_clusters])
+
+        for icluster in np.unique(nearest_clusters):
+
+            pick = nearest_clusters==icluster
+            c = current_palette[icluster]
+            plt.rc('font', size=8) 
+            plt.plot(X[pick,0],X[pick,1],"p",
+                    color=c,
+                    alpha=0.5,label="cluster = {}, N = {:6.0f}".format(icluster,np.sum(pick)))
+            plt.text(clusters[icluster,0],
+                    clusters[icluster,1],
+                    "c{}".format(icluster),
+                    fontsize=10,color="red")
+            plt.title("Clusters")
+            plt.xlabel("width")
+            plt.ylabel("height")
+            plt.legend(title="Mean IoU = {:5.4f}".format(WithinClusterMeanDist))  
+        
+    return clusters, nearest_clusters, distances

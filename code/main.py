@@ -7,6 +7,7 @@ import preprocess
 import tensorflow as tf
 from kmeans import get_kmeans
 from visualize_boxes import visualize
+import numpy as np
 
 # from model.process_ground_truths import correct_ground_truths
 
@@ -43,14 +44,15 @@ def main():
         #     annotation_train_dir,
         #     resized_img_dir,
         #     save_data=True,
+        #     testing=False,
         # )
         # Step 1-2: resize all images to 416 * 416, store inidividual bounding boxes
         # preprocess.parse_data_single(
-        #     raw_img_dir, annotation_train_dir, resized_one_file_dir
+        #     raw_img_dir, annotation_train_dir, resized_one_file_dir, num_examples=5000
         # )
 
         # Step 2: read in processed json data
-        y = preprocess.get_data(resized_img_dir / "annotations.json")
+        # y = preprocess.get_data(resized_img_dir / "annotations.json")
 
         # Visualize a single image
         # batch = preprocess.get_batch(y)
@@ -60,20 +62,15 @@ def main():
 
     # Step 3 compute kmeans
     # Get KMeans (defaulting to 3 anchor boxes)
-    anchor_boxes = get_kmeans(
+    clusters, nearest_clusters, distances = get_kmeans(
         resized_one_file_dir=resized_one_file_dir,
         annotation_filename=annotation_train_dir,
+        cluster_num=6
     )
-    anchor_boxes = [
-        [216, 216],
-        [16, 30],
-        [33, 23],
-        [30, 61],
-        [62, 45],
-        [59, 119],
-    ]
+    
 
-    ## Apply loss function
+    
+    
 
     return None
 
