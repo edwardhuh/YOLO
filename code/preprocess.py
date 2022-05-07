@@ -119,7 +119,7 @@ def parse_data(
 
 
 def parse_data_single(
-    inputs_file_path, labels_file_path, resized_one_file, num_examples=100
+    inputs_file_path, labels_file_path, resized_one_file, num_examples=5000
 ):
     """
     Parses data to create one .txt file for each image. Also resizes images to 416x416
@@ -173,9 +173,27 @@ def parse_data_single(
             x_3 = bounding_box["hbox"][3] / sz[1]  # height of box
             boxes.append([x_0, x_1, x_2, x_3])
         # add boxes to current dict and current dict to list of dicts
-        with open(newpath + ".txt", "w") as f:
-            for box in boxes:
-                f.write(",".join(map(str, box)) + "\n")
+
+        if len(boxes) > 0:
+            with open(newpath + ".txt", "w") as f:
+                f.write(
+                    ",".join(
+                        [
+                            f"{box[0]:.16f},{box[1]:.16f},{box[2]:.16f},{box[3]:.16f}"
+                            for box in boxes
+                        ]
+                    )
+                )
+
+            # print(newpath + ".txt")
+            # txt = tf.io.read_file(newpath + ".txt")
+            # txt = tf.strings.split(txt, " ")
+            # txt = tf.strings.to_number(txt, tf.float32)
+            # txt = tf.reshape(txt, (-1, 4))
+
+        else:
+            os.remove(newpath + ".jpg")
+            print("Removed ", newpath + ".jpg")
         i += 1
 
 

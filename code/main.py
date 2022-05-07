@@ -9,7 +9,6 @@ from kmeans import get_kmeans
 from visualize_boxes import visualize
 import numpy as np
 
-# from model.process_ground_truths import correct_ground_truths
 
 
 def main():

@@ -5,6 +5,18 @@ from tensorflow.keras.layers import (BatchNormalization, Concatenate, Conv2D,
 from utils import correct_ground_truths
 
 GRID_SIZES = [13, 26]
+anchor_boxes = [
+    [
+        [10, 14],
+        [16, 30],
+        [33, 23],
+    ],
+    [
+        [30, 61],
+        [62, 45],
+        [59, 119],
+    ],
+]
 
 
 class YOLO_Head(tf.keras.layers.Layer):
@@ -48,7 +60,7 @@ class YOLO_Head(tf.keras.layers.Layer):
         anchors_tensor = tf.reshape(
             tf.constant(self.anchor_boxes, tf.float32), [1, 1, 1, self.n_anchors, 2]
         )
-        grid_y, grid_x = tf.shape(inputs)[1:3]
+        grid_y, grid_x = inputs.shape[1:3]
 
         inputs = tf.reshape(
             inputs, (-1, grid_y, grid_x, self.n_anchors, 5 + self.n_classes)
@@ -75,7 +87,7 @@ class YOLO_Head(tf.keras.layers.Layer):
         )
         # box width and height
         box_wh = tf.math.exp(inputs[..., 2:4]) * (
-            anchors_tensor / tf.convert_to_tensor(input_shape[::-1], tf.float32)
+            anchors_tensor / tf.constant(input_shape, tf.float32)
         )
         # objectness score
         box_confidence = tf.math.sigmoid(inputs[..., 4:5])
@@ -83,7 +95,7 @@ class YOLO_Head(tf.keras.layers.Layer):
         box_class_probs = tf.math.sigmoid(inputs[..., 5:])
 
         if train:
-            return inputs, box_confidence, box_class_probs
+            return grid, inputs, box_xy, box_wh
         return box_xy, box_wh, box_confidence, box_class_probs
 
 
@@ -128,17 +140,19 @@ class ConvUnit(tf.keras.layers.Layer):
 class YOLOv3_Tiny(tf.keras.Model):
     def __init__(
         self,
-        anchors,
+        input_size,
+        anchor_boxes,
         iou_threshold,
         score_threshold,
         n_classes=1,
     ):
         super(YOLOv3_Tiny, self).__init__()
         self.n_classes = n_classes
-        self.anchors = anchors
-        self.n_anchors = len(anchors)
+        self.anchor_boxes = anchor_boxes
+        self.n_anchors = sum([len(anchors) for anchors in anchor_boxes])
         self.iou_threshold = iou_threshold
         self.score_threshold = score_threshold
+        self.input_size = input_size
 
         self.conv1 = ConvUnit(16, 3, "conv1")
         self.conv2 = ConvUnit(32, 3, "conv2")
@@ -160,7 +174,7 @@ class YOLOv3_Tiny(tf.keras.Model):
             activation="linear",
         )
 
-        self.yolo_head_1 = YOLO_Head(self.anchors[0:3], n_classes=self.n_classes)
+        # self.yolo_head_1 = YOLO_Head(self.anchor_boxes[0], n_classes=self.n_classes)
 
         ######
 
@@ -178,11 +192,11 @@ class YOLOv3_Tiny(tf.keras.Model):
             pool=False,
         )
 
-        self.yolo_head_2 = YOLO_Head(self.anchors[3:], n_classes=self.n_classes)
+        # self.yolo_head_2 = YOLO_Head(self.anchor_boxes[1], n_classes=self.n_classes)
 
         ######
 
-    def __call__(self, inputs, train=True):
+    def __call__(self, inputs):
 
         x1 = self.conv1(inputs)
         x1 = self.conv2(x1)
@@ -197,7 +211,7 @@ class YOLOv3_Tiny(tf.keras.Model):
 
         y1 = self.conv9(x2)
         y1 = self.conv10(y1)
-        y1 = self.yolo_head_1(y1, input_shape=[416, 416], train=train)
+        # y1 = self.yolo_head_1(y1, input_shape=self.input_size, train=train)
 
         ######
 
@@ -207,31 +221,29 @@ class YOLOv3_Tiny(tf.keras.Model):
         x3 = self.concat([x2, x1])
         y2 = self.conv12(x3)
         y2 = self.conv13(y2)
-        y2 = self.yolo_head_2(y2, input_shape=[416, 416], train=train)
+        # y2 = self.yolo_head_2(y2, input_shape=self.input_size, train=train)
 
         ######
 
         return y1, y2
 
-    @tf.function
     def train_step(self, data):
 
         imgs, boxes = data
-        y_true = correct_ground_truths(boxes, GRID_SIZES, self.anchors)
+        y_true = correct_ground_truths(boxes, GRID_SIZES, self.anchor_boxes)
 
         with tf.GradientTape() as tape:
             y_pred = self(imgs)
-            loss = self.compiled_loss(y_true, y_pred)
+            loss = self.compiled_loss(y_true, y_pred, self.anchor_boxes, 0.5, 0.5)
         gradients = tape.gradient(loss, self.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
         return loss
 
-    @tf.function
     def test_step(self, data):
 
         imgs, boxes = data
-        y_true = correct_ground_truths(boxes, GRID_SIZES, self.anchors)
+        y_true = correct_ground_truths(boxes, GRID_SIZES, self.anchor_boxes)
 
         y_pred = self(imgs)
         loss = self.compiled_loss(y_true, y_pred)
@@ -241,20 +253,7 @@ class YOLOv3_Tiny(tf.keras.Model):
 
 if __name__ == "__main__":
 
-    anchors = [
-        [10, 13],
-        [16, 30],
-        [33, 23],
-        [30, 61],
-        [62, 45],
-        [59, 119],
-    ]
-
-    model = YOLOv3_Tiny(anchors, 0.5, 0.5, 1)
-    model.compile(
-        optimizer=Adam(1e-3),
-        loss=yolov3_loss(anchors, 1),
-    )
+    model = YOLOv3_Tiny(anchor_boxes, 0.5, 0.5, 1)
 
     test = tf.random.uniform((1, 416, 416, 3))
     y1, y2 = model(test)
