@@ -1,20 +1,26 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import (BatchNormalization, Concatenate, Conv2D,
-                                     LeakyReLU, MaxPooling2D, UpSampling2D)
+from tensorflow.keras.layers import (
+    BatchNormalization,
+    Concatenate,
+    Conv2D,
+    LeakyReLU,
+    MaxPooling2D,
+    UpSampling2D,
+)
 from utils import correct_ground_truths
 
 GRID_SIZES = [13, 26]
 anchor_boxes = [
     [
-        [10, 14],
-        [16, 30],
-        [33, 23],
+        [0.004962779156327543, 0.007331378299120235],
+        [0.0732421875, 0.12987012987012986],
+        [0.015833333333333335, 0.026415094339622643],
     ],
     [
-        [30, 61],
-        [62, 45],
-        [59, 119],
+        [0.041666666666666664, 0.07505646217926168],
+        [0.009375, 0.014664711632453569],
+        [0.0263671875, 0.046153846153846156],
     ],
 ]
 
@@ -86,9 +92,7 @@ class YOLO_Head(tf.keras.layers.Layer):
             [grid_y, grid_x], tf.float32
         )
         # box width and height
-        box_wh = tf.math.exp(inputs[..., 2:4]) * (
-            anchors_tensor / tf.constant(input_shape, tf.float32)
-        )
+        box_wh = tf.math.exp(inputs[..., 2:4]) * anchors_tensor
         # objectness score
         box_confidence = tf.math.sigmoid(inputs[..., 4:5])
         # class scores
@@ -174,7 +178,7 @@ class YOLOv3_Tiny(tf.keras.Model):
             activation="linear",
         )
 
-        # self.yolo_head_1 = YOLO_Head(self.anchor_boxes[0], n_classes=self.n_classes)
+        self.yolo_head_1 = YOLO_Head(self.anchor_boxes[0], n_classes=self.n_classes)
 
         ######
 
@@ -192,11 +196,11 @@ class YOLOv3_Tiny(tf.keras.Model):
             pool=False,
         )
 
-        # self.yolo_head_2 = YOLO_Head(self.anchor_boxes[1], n_classes=self.n_classes)
+        self.yolo_head_2 = YOLO_Head(self.anchor_boxes[1], n_classes=self.n_classes)
 
         ######
 
-    def __call__(self, inputs):
+    def __call__(self, inputs, train=True):
 
         x1 = self.conv1(inputs)
         x1 = self.conv2(x1)
@@ -211,7 +215,7 @@ class YOLOv3_Tiny(tf.keras.Model):
 
         y1 = self.conv9(x2)
         y1 = self.conv10(y1)
-        # y1 = self.yolo_head_1(y1, input_shape=self.input_size, train=train)
+        y1 = self.yolo_head_1(y1, input_shape=self.input_size, train=train)
 
         ######
 
@@ -221,7 +225,7 @@ class YOLOv3_Tiny(tf.keras.Model):
         x3 = self.concat([x2, x1])
         y2 = self.conv12(x3)
         y2 = self.conv13(y2)
-        # y2 = self.yolo_head_2(y2, input_shape=self.input_size, train=train)
+        y2 = self.yolo_head_2(y2, input_shape=self.input_size, train=train)
 
         ######
 
@@ -249,6 +253,9 @@ class YOLOv3_Tiny(tf.keras.Model):
         loss = self.compiled_loss(y_true, y_pred)
 
         return loss
+
+    def predict(self, images):
+        y_pred = self(images)
 
 
 if __name__ == "__main__":

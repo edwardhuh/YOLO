@@ -5,11 +5,17 @@ from pathlib import Path
 
 import numpy as np
 import tensorflow as tf
-from utils import CustomModelSaver, parse_args
 
-from model import YOLOv3_Tiny, YOLO_Head, anchor_boxes
-from utils import correct_ground_truths, CustomModelSaver, parse_args
+from model import YOLOv3_Tiny, anchor_boxes
+from utils import (
+    correct_ground_truths,
+    parse_args,
+    scan_weight_files,
+    correct_boxes_and_scores,
+    non_max_suppression,
+)
 from loss import compute_loss
+from precision import precision
 
 
 MAX_BB_NUM = 179
@@ -24,7 +30,6 @@ def process_image(img_path):
 
 
 def process_txt(txt_path):
-    print(txt_path)
     txt = tf.io.read_file(txt_path, "utf-8")
     txt = tf.strings.to_number(tf.strings.split(txt, ","), tf.float32)
     txt = tf.reshape(txt, (-1, 4))
@@ -48,9 +53,8 @@ label_dataset_train = tf.data.Dataset.list_files(
 ds = tf.data.Dataset.zip((image_dataset_train, label_dataset_train))
 
 ds_train = (
-    ds.take(100)
+    ds.take(4000)
     .shuffle(buffer_size=1000)
-    .cache()
     .prefetch(buffer_size=tf.data.AUTOTUNE)
     .batch(16, drop_remainder=True, num_parallel_calls=tf.data.AUTOTUNE)
 )
@@ -58,31 +62,14 @@ ds_train = (
 ds_val = (
     ds.skip(4000)
     .shuffle(buffer_size=1000)
-    .cache()
     .prefetch(buffer_size=tf.data.AUTOTUNE)
-    .batch(128, num_parallel_calls=tf.data.AUTOTUNE)
+    .batch(64, num_parallel_calls=tf.data.AUTOTUNE)
 )
 
 
 if __name__ == "__main__":
 
     ARGS = parse_args()
-
-    time_now = datetime.now()
-    timestamp = time_now.strftime("%m%d%y-%H%M%S")
-
-    checkpoint_dir = Path("./checkpoints/YOLOv3" + "-" + timestamp)
-
-    if not checkpoint_dir.exists():
-        checkpoint_dir.mkdir()
-
-    callbacks_list = [
-        tf.keras.callbacks.TensorBoard(
-            log_dir="./logs/YOLOv3" + "-" + timestamp,
-            histogram_freq=0,
-        ),
-        CustomModelSaver(checkpoint_dir, 5),
-    ]
 
     # Create the model
     model = YOLOv3_Tiny(
@@ -93,24 +80,103 @@ if __name__ == "__main__":
         score_threshold=0.5,
     )
 
-    yolo_head_1 = YOLO_Head(anchor_boxes[0], n_classes=1)
-    yolo_head_2 = YOLO_Head(anchor_boxes[1], n_classes=1)
+    init_epoch = None
+
+    if ARGS.load_checkpoint is not None:
+        ARGS.load_checkpoint = Path(ARGS.load_checkpoint)
+        if not ARGS.checkpoint.exists():
+            raise FileNotFoundError(f"Checkpoint {ARGS.load_checkpoint} not found")
+
+        checkpoint_dir = ARGS.load_checkpoint.parent
+        model.load_weights(ARGS.load_checkpoint)
+        regex = r"(?:.+)(?:\.e)(\d+)(?:.+)(?:.h5)"
+        init_epoch = int(re.match(regex, ARGS.load_checkpoint.name).group(1)) + 1
+        timestamp = checkpoint_dir.stem[-13:]
+
+    else:
+        time_now = datetime.now()
+        timestamp = time_now.strftime("%m%d%y-%H%M%S")
+        checkpoint_dir = Path("./checkpoints/YOLOv3" + "-" + timestamp)
+        if not checkpoint_dir.exists():
+            checkpoint_dir.mkdir()
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
 
     ### training the model:
 
-    for epoch in range(100):
-        print(epoch)
+    epochs = 100
+    max_num_weights = 5
+
+    for epoch in range(epochs):
+
+        print(f"Epoch {epoch+1}/{epochs}")
+
+        pbar = tf.keras.utils.Progbar(target=len(ds_train), width=30)
+        metrics = {}
+
+        # train the model
+
+        steps = 0
         for imgs, boxes in ds_train:
+
             y_true = correct_ground_truths(boxes, GRID_SIZES, anchor_boxes)
 
             with tf.GradientTape() as tape:
-                y_pred_1, y_pred_2 = model(imgs)
-                head_1 = yolo_head_1(y_pred_1, input_shape=416, train=True)
-                head_2 = yolo_head_2(y_pred_2, input_shape=416, train=True)
-                y_pred = [head_1, head_2]
-                loss = compute_loss(y_true, y_pred, anchor_boxes, 0.5, 0.5)
-                print(loss.numpy())
+                y_pred = model(imgs)
+                loss, results = compute_loss(y_true, y_pred, anchor_boxes, 0.5, 0.5)
+
             gradients = tape.gradient(loss, model.trainable_variables)
             optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+            metrics.update(results)
+            pbar.update(steps, values=metrics.items(), finalize=False)
+
+            steps += 1
+
+        # validation:
+        precisions = []
+        for imgs, true_boxes in ds_val:
+            y_pred = model(imgs, train=False)
+            boxes_list, scores_list = correct_boxes_and_scores(y_pred)
+
+            for i, (pred_boxes, scores, ground_truth_boxes) in enumerate(
+                zip(boxes_list, scores_list, tf.unstack(true_boxes))
+            ):
+                pred_boxes, scores = non_max_suppression(pred_boxes, scores, 100, 0.5)
+                scores_sorted = tf.argsort(scores, direction="DESCENDING")
+                boxes = tf.gather(boxes, scores_sorted, axis=0)
+                scores = tf.gather(scores, scores_sorted)
+
+                ground_truth_boxes = tf.boolean_mask(
+                    ground_truth_boxes, tf.reduce_sum(ground_truth_boxes, axis=1) > 0.0
+                )
+
+                true_pos, false_pos = precision(true_boxes=boxes, pred_boxes=boxes)
+                precisions.append([true_pos, false_pos])
+
+        precisions = tf.constant(np.array(precisions), dtype=tf.float32)
+        tp = tf.reduce_mean(precisions[:, 0])
+        fp = tf.reduce_mean(precisions[:, 1])
+        ap = tp / (tp + fp + 1e-10)
+
+        metrics.update({"AP": ap.numpy()})
+
+        pbar.update(steps, values=metrics.items(), finalize=True)
+
+        min_acc_file, max_acc_file, max_acc, num_weights = scan_weight_files(
+            checkpoint_dir
+        )
+
+        cur_acc = ap.numpy()
+
+        # Only save weights if test accuracy exceeds the previous best
+        # weight file
+        if cur_acc > max_acc:
+            save_name = "weights.e{0:03d}-acc{1:.4f}.h5".format(epoch, cur_acc)
+
+            model.save_weights(checkpoint_dir / save_name)
+
+            # Ensure max_num_weights is not exceeded by removing
+            # minimum weight
+            if max_num_weights > 0 and num_weights + 1 > max_num_weights:
+                os.remove(checkpoint_dir / min_acc_file)

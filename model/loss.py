@@ -1,22 +1,43 @@
+from cv2 import exp
 import tensorflow as tf
 
 from typing import List
 
 
-
-def compute_iou(pred_box: tf.Tensor, true_box: tf.Tensor):
+def compute_iou(
+    pred_box: tf.Tensor,
+    true_box: tf.Tensor,
+    expand_dims: bool = False,
+    preprocess_pred: bool = False,
+    preprocess_true: bool = False,
+):
     """
     Compute the IOU between two boxes
     """
+
+    if expand_dims:
+        pred_box = tf.expand_dims(pred_box, axis=-2)
+
     pred_box_xy = pred_box[..., 0:2]
     pred_box_wh = pred_box[..., 2:4]
-    pred_box_min = pred_box_xy - pred_box_wh / 2
-    pred_box_max = pred_box_xy + pred_box_wh / 2
+    if preprocess_pred:
+        pred_box_min = pred_box_xy - pred_box_wh / 2
+        pred_box_max = pred_box_xy + pred_box_wh / 2
+    else:
+        pred_box_min = pred_box_xy
+        pred_box_max = pred_box_xy
 
     true_box_xy = true_box[..., 0:2]
     true_box_wh = true_box[..., 2:4]
-    true_box_min = true_box_xy - true_box_wh / 2
-    true_box_max = true_box_xy + true_box_wh / 2
+    if preprocess_true:
+        true_box_min = true_box_xy - true_box_wh / 2
+        true_box_max = true_box_xy + true_box_wh / 2
+    else:
+        true_box_min = true_box_xy
+        true_box_max = true_box_xy
+
+    if expand_dims:
+        true_box = tf.expand_dims(true_box, axis=-0)
 
     intersect_mins = tf.maximum(pred_box_min, true_box_min)
     intersect_max = tf.minimum(pred_box_max, true_box_max)
@@ -25,33 +46,6 @@ def compute_iou(pred_box: tf.Tensor, true_box: tf.Tensor):
     pred_box_area = pred_box_wh[..., 0] * pred_box_wh[..., 1]
     true_box_area = true_box_wh[..., 0] * true_box_wh[..., 1]
     return intersect_area / (true_box_area + pred_box_area - intersect_area)
-
-
-def compute_iou_for_loss(pred_box: tf.Tensor, true_box: tf.Tensor):
-    """
-    Compute the IOU between two boxes
-    """
-
-    pred_box = tf.expand_dims(pred_box, axis=-2)
-    pred_box_xy = pred_box[..., 0:2]
-    pred_box_wh = pred_box[..., 2:4]
-    pred_box_min = pred_box_xy - pred_box_wh / 2
-    pred_box_max = pred_box_xy + pred_box_wh / 2
-
-    true_box = tf.expand_dims(true_box, axis=0)
-    true_box_xy = true_box[..., 0:2]
-    true_box_wh = true_box[..., 2:4]
-    true_box_min = true_box_xy - true_box_wh / 2
-    true_box_max = true_box_xy + true_box_wh / 2
-
-    intersect_mins = tf.maximum(pred_box_min, true_box_min)
-    intersect_max = tf.minimum(pred_box_max, true_box_max)
-    intersect_wh = tf.maximum(intersect_max - intersect_mins, 0)
-    intersect_area = intersect_wh[..., 0] * intersect_wh[..., 1]
-    pred_box_area = pred_box_wh[..., 0] * pred_box_wh[..., 1]
-    true_box_area = true_box_wh[..., 0] * true_box_wh[..., 1]
-    return intersect_area / (true_box_area + pred_box_area - intersect_area)
-
 
 
 def calc_scale(alpha, targets, preds, gamma):
@@ -88,9 +82,9 @@ def compute_ignore_mask_per_image(concatenated, ignore_thresh):
 
     object_mask_bool = tf.cast(object_mask, tf.bool)
     true_box = tf.boolean_mask(true_box, object_mask_bool)
-    ious = compute_iou_for_loss(pred_box, true_box)
+    ious = compute_iou(pred_box, true_box, expand_dims=True)
     best_ious = tf.reduce_max(ious, axis=-1)
-    ignore_mask_per_image = best_ious > ignore_thresh
+    ignore_mask_per_image = best_ious < ignore_thresh
 
     return ignore_mask_per_image
 
@@ -129,14 +123,14 @@ def compute_loss(
 
     # for loop for the loss, as each layer needs to be calculated separately.
     # The associated layer and resultant grid traversed together. (ref `grid` variable)
+    results = {}
     for l, grid_size in zip(range(num_layers), grid_sizes):
 
         grid, y_pred_raw, box_xy_head, box_wh_head = y_pred_list[l]
         y_true = y_true_list[l]
         anchor_boxes_tensor = tf.reshape(
-            tf.convert_to_tensor(anchor_boxes[l]), [-1, 3, 2]
+            tf.convert_to_tensor(anchor_boxes[l], dtype=tf.float32), [-1, 3, 2]
         )
-        anchor_boxes_tensor = tf.cast(anchor_boxes_tensor, tf.float32)
 
         batch_size = tf.cast(tf.shape(y_pred_raw)[0], tf.float32)
 
@@ -161,10 +155,10 @@ def compute_loss(
                 * box_loss_scale[..., 0]
             )
             / batch_size
-        )
+        ) * 5.0
 
         # Loss 2: WH Loss
-        box_wh_true = tf.math.log(y_true[..., 2:4] / (anchor_boxes_tensor / 416))
+        box_wh_true = tf.math.log(y_true[..., 2:4] / anchor_boxes_tensor)
         box_wh_true = tf.keras.backend.switch(
             object_mask, box_wh_true, tf.zeros_like(box_wh_true)
         )
@@ -186,7 +180,8 @@ def compute_loss(
 
         conf_loss = (
             tf.reduce_sum(object_mask * tf.square(y_true_conf - y_pred_conf))
-            + tf.reduce_sum(
+            + 0.5
+            * tf.reduce_sum(
                 (1 - object_mask) * tf.square(y_true_conf - y_pred_conf) * ignore_mask
             )
         ) / batch_size
@@ -203,13 +198,18 @@ def compute_loss(
         # Loss 5: Total Loss
         total_loss = xy_loss + wh_loss + conf_loss + class_loss
 
-        print(
-            l, xy_loss.numpy(), wh_loss.numpy(), conf_loss.numpy(), class_loss.numpy()
-        )
+        results[f"xy_{l}"] = xy_loss.numpy()
+        results[f"wh_{l}"] = wh_loss.numpy()
+        results[f"cf_{l}"] = conf_loss.numpy()
+        results[f"cl_{l}"] = class_loss.numpy()
 
         overall_loss += total_loss
-    return overall_loss
+    results["loss"] = overall_loss.numpy()
+
+    return overall_loss, results
 
 
 if __name__ == "__main__":
-    compute_loss()
+    y_pred = tf.ones(shape=[2, 4])
+    y_true = tf.ones(shape=[1, 4]) / 2
+    print(compute_iou(y_pred, y_true))

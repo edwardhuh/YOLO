@@ -4,6 +4,8 @@ import re
 import numpy as np
 import tensorflow as tf
 
+from pathlib import Path
+
 GRID_SIZES = [13, 26]
 anchor_boxes = [
     [
@@ -63,7 +65,7 @@ def correct_ground_truth(ground_truths, grid_size, anchor_boxes):
     output_tensor = np.zeros([grid_size, grid_size, n_anchors, 6], dtype=np.float32)
     cell_size = 1.0 / grid_size
 
-    anchors = np.repeat(anchors / 416, n_bounding_boxes, axis=0)
+    anchors = np.repeat(anchors, n_bounding_boxes, axis=0)
     intersect_mins = np.maximum(np.expand_dims(ground_truths[:, 2:4], axis=1), anchors)
     intersect_maxes = np.minimum(np.expand_dims(ground_truths[:, 2:4], axis=1), anchors)
     intersect_wh = np.maximum(intersect_maxes - intersect_mins, 0.0)
@@ -97,59 +99,6 @@ if __name__ == "__main__":
     assert outputs[0][0, 0, 0, 0, 4] == 1.0
 
 
-class CustomModelSaver(tf.keras.callbacks.Callback):
-    """Custom Keras callback for saving weights of networks."""
-
-    def __init__(self, checkpoint_dir, max_num_weights=5):
-        super(CustomModelSaver, self).__init__()
-
-        self.checkpoint_dir = checkpoint_dir
-        self.max_num_weights = max_num_weights
-
-    def on_epoch_end(self, epoch, logs=None):
-        """At epoch end, weights are saved to checkpoint directory."""
-
-        min_acc_file, max_acc_file, max_acc, num_weights = self.scan_weight_files()
-
-        cur_acc = logs["val_sparse_categorical_accuracy"]
-
-        # Only save weights if test accuracy exceeds the previous best
-        # weight file
-        if cur_acc > max_acc:
-            save_name = "weights.e{0:03d}-acc{1:.4f}.h5".format(epoch, cur_acc)
-
-            self.model.save_weights(self.checkpoint_dir / save_name)
-
-            # Ensure max_num_weights is not exceeded by removing
-            # minimum weight
-            if self.max_num_weights > 0 and num_weights + 1 > self.max_num_weights:
-                os.remove(self.checkpoint_dir / min_acc_file)
-
-    def scan_weight_files(self):
-        """Scans checkpoint directory to find current minimum and maximum
-        accuracy weights files as well as the number of weights."""
-
-        min_acc = float("inf")
-        max_acc = 0
-        min_acc_file = ""
-        max_acc_file = ""
-        num_weights = 0
-
-        for weight_file in self.checkpoint_dir.glob("*.h5"):
-            num_weights += 1
-            file_acc = float(
-                re.findall(r"[+-]?\d+\.\d+", weight_file.name.split("acc")[-1])[0]
-            )
-            if file_acc > max_acc:
-                max_acc = file_acc
-                max_acc_file = weight_file.name
-            if file_acc < min_acc:
-                min_acc = file_acc
-                min_acc_file = weight_file.name
-
-        return min_acc_file, max_acc_file, max_acc, num_weights
-
-
 def parse_args():
     """Perform command-line argument parsing."""
 
@@ -167,3 +116,101 @@ def parse_args():
     )
 
     return parser.parse_args()
+
+
+def scan_weight_files(checkpoint_dir):
+    """Scans checkpoint directory to find current minimum and maximum
+    accuracy weights files as well as the number of weights."""
+
+    min_acc = float("inf")
+    max_acc = 0
+    min_acc_file = ""
+    max_acc_file = ""
+    num_weights = 0
+
+    for weight_file in checkpoint_dir.glob("*.h5"):
+        num_weights += 1
+        file_acc = float(
+            re.findall(r"[+-]?\d+\.\d+", weight_file.name.split("acc")[-1])[0]
+        )
+        if file_acc > max_acc:
+            max_acc = file_acc
+            max_acc_file = weight_file.name
+        if file_acc < min_acc:
+            min_acc = file_acc
+            min_acc_file = weight_file.name
+
+    return min_acc_file, max_acc_file, max_acc, num_weights
+
+
+def correct_boxes_and_scores(
+    y_pred_list, input_size=416, image_sizes=None, score_threshold=0.6
+):
+    """Correct bounding boxes for network output."""
+
+    boxes_list = [[], []]
+    scores_list = [[], []]
+
+    for i, y_pred in enumerate(y_pred_list):
+        box_xy, box_wh, box_confidence, box_class_probs = y_pred
+
+        # correct boxes for network output
+        box_yx = box_xy[..., ::-1]
+        box_hw = box_wh[..., ::-1]
+        input_shape = tf.constant([input_size, input_size], dtype=tf.float32)
+
+        if image_sizes is not None:
+            image_shape = tf.constant(image_sizes, dtype=tf.float32)
+        else:
+            image_shape = input_shape
+
+        new_shape = tf.round(image_shape * tf.reduce_min(input_shape / image_shape))
+        offset = (input_shape - new_shape) / 2.0 / input_shape
+        scale = input_shape / new_shape
+        box_yx = (box_yx - offset) * scale
+        box_hw *= scale
+
+        box_mins = box_yx - (box_hw / 2.0)
+        box_maxes = box_yx + (box_hw / 2.0)
+
+        boxes_tensor = tf.concat([box_mins, box_maxes], axis=-1)
+        box_scores_tensor = box_confidence * box_class_probs
+
+        for boxes, box_scores in zip(
+            tf.unstack(boxes_tensor), tf.unstack(box_scores_tensor)
+        ):
+            boxes = tf.reshape(boxes, [-1, 4])
+            box_scores = tf.reshape(box_scores, [-1, 1])
+
+            boxes = tf.boolean_mask(
+                boxes, tf.reshape(box_scores > score_threshold, (-1,))
+            )
+            box_scores = tf.boolean_mask(box_scores, box_scores > score_threshold)
+
+            boxes_list[i].append(boxes)
+            scores_list[i].append(box_scores)
+
+    for i, (boxes, scores) in enumerate(zip(boxes_list, scores_list)):
+        boxes_list[i] = tf.concat(boxes, axis=0)
+        scores_list[i] = tf.concat(scores, axis=0)
+
+    return boxes_list, scores_list
+
+
+def non_max_suppression(boxes, scores, max_output_size=100, iou_threshhold=0.5):
+    """Perform non-max suppression on bounding boxes."""
+
+    nms_index = tf.image.non_max_suppression(
+        boxes,
+        scores,
+        tf.constant(max_output_size, dtype=tf.int32),
+        tf.constant(iou_threshhold, dtype=tf.float32),
+    )
+    boxes = tf.gather(boxes, nms_index)
+    scores = tf.gather(scores, nms_index)
+
+    return boxes, scores
+
+
+if __name__ == "__main__":
+    print(scan_weight_files(Path("./checkpoints/YOLOv3-050622-061555")))

@@ -36,6 +36,6 @@ def NMS(boxes, overlapThresh=0.4):
         h = np.maximum(0, yy2 - yy1 + 1)
         # compute the ratio of overlap
         overlap = (w * h) / areas[temp_indices]
-        if np.any(overlap) > treshold:
+        if np.any(overlap) > overlapThresh:
             indices = indices[indices != i]
     return boxes[indices].astype(int)
