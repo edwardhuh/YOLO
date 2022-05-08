@@ -1,22 +1,21 @@
 import argparse
-import os
 import re
+from pathlib import Path
+
 import numpy as np
 import tensorflow as tf
-
-from pathlib import Path
 
 GRID_SIZES = [13, 26]
 anchor_boxes = [
     [
-        [216, 216],
-        [16, 30],
-        [33, 23],
+        [0.0263671875, 0.046153846153846156],
+        [0.041666666666666664, 0.07505646217926168],
+        [0.0732421875, 0.12987012987012986],
     ],
     [
-        [30, 61],
-        [62, 45],
-        [59, 119],
+        [0.004962779156327543, 0.007331378299120235],
+        [0.009375, 0.014664711632453569],
+        [0.015833333333333335, 0.026415094339622643],
     ],
 ]
 
@@ -66,8 +65,13 @@ def correct_ground_truth(ground_truths, grid_size, anchor_boxes):
     cell_size = 1.0 / grid_size
 
     anchors = np.repeat(anchors, n_bounding_boxes, axis=0)
-    intersect_mins = np.maximum(np.expand_dims(ground_truths[:, 2:4], axis=1), anchors)
-    intersect_maxes = np.minimum(np.expand_dims(ground_truths[:, 2:4], axis=1), anchors)
+    anchor_maxes = anchors / 2
+    anchor_mins = -anchor_maxes
+    box_wh = np.expand_dims(ground_truths[:, 2:4], axis=1)
+    box_maxes = box_wh / 2
+    box_mins = -box_maxes
+    intersect_mins = np.maximum(box_mins, anchor_mins)
+    intersect_maxes = np.minimum(box_maxes, anchor_maxes)
     intersect_wh = np.maximum(intersect_maxes - intersect_mins, 0.0)
     intersect_area = intersect_wh[..., 0] * intersect_wh[..., 1]
     box_area = (ground_truths[:, 2] * ground_truths[:, 3]).reshape((-1, 1))
@@ -79,8 +83,8 @@ def correct_ground_truth(ground_truths, grid_size, anchor_boxes):
     # the downside of doing this is if there are multiple ground boxes in the same cell, the ground truth will be overwritten
 
     for j in range(n_bounding_boxes):
-        grid_x = int(ground_truths[j, 0] // cell_size)
-        grid_y = int(ground_truths[j, 1] // cell_size)
+        grid_x = int(np.floor(ground_truths[j, 0] // cell_size))
+        grid_y = int(np.floor(ground_truths[j, 1] // cell_size))
 
         output_tensor[grid_y, grid_x, best_anchor[j], :4] = ground_truths[
             j,
@@ -92,11 +96,14 @@ def correct_ground_truth(ground_truths, grid_size, anchor_boxes):
 
 if __name__ == "__main__":
     ground_truths = tf.convert_to_tensor(
-        [[[0, 0, 0.5, 0.5], [0, 0, 0, 0]]], dtype=tf.float32
+        [[[0, 0, 0.5, 0.5], [1, 1, 0.5, 0.5]]], dtype=tf.float32
     )
 
     outputs = correct_ground_truths(ground_truths, GRID_SIZES, anchor_boxes)
-    assert outputs[0][0, 0, 0, 0, 4] == 1.0
+    assert outputs[0][0, 0, 0, 2, 4] == 1.0
+    assert outputs[1][0, 0, 0, 2, 2] == 0.5
+    assert outputs[0][0, 12, 12, 2, 4] == 1.0
+    assert outputs[1][0, 25, 25, 2, 2] == 0.5
 
 
 def parse_args():
@@ -220,5 +227,5 @@ def non_max_suppression(boxes, scores, max_output_size=100, iou_threshhold=0.5):
     return boxes, scores
 
 
-if __name__ == "__main__":
-    print(scan_weight_files(Path("./checkpoints/YOLOv3-050622-061555")))
+# if __name__ == "__main__":
+#     print(scan_weight_files(Path("./checkpoints/YOLOv3-050622-061555")))

@@ -8,21 +8,7 @@ from tensorflow.keras.layers import (
     MaxPooling2D,
     UpSampling2D,
 )
-from utils import correct_ground_truths
-
-GRID_SIZES = [13, 26]
-anchor_boxes = [
-    [
-        [0.004962779156327543, 0.007331378299120235],
-        [0.0732421875, 0.12987012987012986],
-        [0.015833333333333335, 0.026415094339622643],
-    ],
-    [
-        [0.041666666666666664, 0.07505646217926168],
-        [0.009375, 0.014664711632453569],
-        [0.0263671875, 0.046153846153846156],
-    ],
-]
+from utils import correct_ground_truths, anchor_boxes, GRID_SIZES
 
 
 class YOLO_Head(tf.keras.layers.Layer):
@@ -52,7 +38,7 @@ class YOLO_Head(tf.keras.layers.Layer):
         self.n_anchors = len(anchor_boxes)
         self.n_classes = n_classes
 
-    def call(self, inputs, input_shape, train=True):
+    def call(self, inputs, train=True):
         """Reshapes `inputs` into final YOLO output format:
 
         # 2 values for box center offsets(in x an y, relative to cell center),
@@ -215,7 +201,7 @@ class YOLOv3_Tiny(tf.keras.Model):
 
         y1 = self.conv9(x2)
         y1 = self.conv10(y1)
-        y1 = self.yolo_head_1(y1, input_shape=self.input_size, train=train)
+        y1 = self.yolo_head_1(y1, train=train)
 
         ######
 
@@ -225,7 +211,7 @@ class YOLOv3_Tiny(tf.keras.Model):
         x3 = self.concat([x2, x1])
         y2 = self.conv12(x3)
         y2 = self.conv13(y2)
-        y2 = self.yolo_head_2(y2, input_shape=self.input_size, train=train)
+        y2 = self.yolo_head_2(y2, train=train)
 
         ######
 

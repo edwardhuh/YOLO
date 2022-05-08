@@ -6,13 +6,14 @@ from pathlib import Path
 import numpy as np
 import tensorflow as tf
 
-from model import YOLOv3_Tiny, anchor_boxes
+from model import YOLOv3_Tiny
 from utils import (
     correct_ground_truths,
     parse_args,
     scan_weight_files,
     correct_boxes_and_scores,
     non_max_suppression,
+    anchor_boxes,
 )
 from loss import compute_loss
 from precision import precision
@@ -104,7 +105,7 @@ if __name__ == "__main__":
 
     ### training the model:
 
-    epochs = 100
+    epochs = 500
     max_num_weights = 5
 
     for epoch in range(epochs):
@@ -116,7 +117,7 @@ if __name__ == "__main__":
 
         # train the model
 
-        steps = 1
+        steps = 0
         for imgs, boxes in ds_train:
 
             y_true = correct_ground_truths(boxes, GRID_SIZES, anchor_boxes)
@@ -143,7 +144,7 @@ if __name__ == "__main__":
                 zip(boxes_list, scores_list, tf.unstack(true_boxes))
             ):
                 pred_boxes, scores = non_max_suppression(
-                    raw_boxes, raw_scores, 100, 0.5
+                    raw_boxes, raw_scores, 30, 0.5
                 )
                 pred_boxes = tf.gather(
                     pred_boxes,

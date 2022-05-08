@@ -133,13 +133,12 @@ def compute_loss(
         anchor_boxes_tensor = tf.reshape(
             tf.convert_to_tensor(anchor_boxes[l], dtype=tf.float32), [-1, 3, 2]
         )
+        object_mask = y_true[..., 4:5]
 
         batch_size = tf.cast(tf.shape(y_pred_raw)[0], tf.float32)
 
         # we need to get the xy values. This MIGHT not be index 3 depending on the input format
-        y_true_conf = y_true[..., 4:5]
-        y_pred_conf = tf.nn.sigmoid(y_true[..., 4:5])
-        object_mask = tf.cast(y_pred_conf > score_threshold, tf.float32)
+        y_pred_conf = y_pred_raw[..., 4:5]
         box_loss_scale = 2 - y_true[l][..., 2:3] * y_true[l][..., 3:4]
 
         # Loss 1: XY Loss
@@ -157,7 +156,7 @@ def compute_loss(
                 * box_loss_scale[..., 0]
             )
             / batch_size
-        ) * 5.0
+        )
 
         # Loss 2: WH Loss
         box_wh_true = tf.math.log(y_true[..., 2:4] / anchor_boxes_tensor)
@@ -180,12 +179,13 @@ def compute_loss(
 
         ignore_mask = compute_ignore_mask(bb_pred, bb_true, object_mask, iou_threshold)
 
+        bce_loss = tf.keras.losses.binary_crossentropy(
+            object_mask, y_pred_conf, from_logits=True
+        )
         conf_loss = (
-            tf.reduce_sum(object_mask * tf.square(y_true_conf - y_pred_conf))
+            tf.reduce_sum(object_mask[..., 0] * bce_loss)
             + 0.5
-            * tf.reduce_sum(
-                (1 - object_mask) * tf.square(y_true_conf - y_pred_conf) * ignore_mask
-            )
+            * tf.reduce_sum((1 - object_mask[..., 0]) * bce_loss * ignore_mask[..., 0])
         ) / batch_size
 
         # Loss 4: Class Loss
