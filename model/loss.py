@@ -92,7 +92,7 @@ def compute_ignore_mask_per_image(concatenated, ignore_thresh):
 
 
 def logit(x):
-    return -tf.math.log(x / (x - 1.0))
+    return tf.math.log(x / (1.0 - x + 1e-6))
 
 
 def compute_loss(
@@ -126,7 +126,7 @@ def compute_loss(
     # for loop for the loss, as each layer needs to be calculated separately.
     # The associated layer and resultant grid traversed together. (ref `grid` variable)
     results = {}
-    for l, grid_size in zip(range(num_layers), grid_sizes):
+    for l, grid_size in enumerate(grid_sizes):
 
         grid, y_pred_raw, box_xy_head, box_wh_head = y_pred_list[l]
         y_true = y_true_list[l]
@@ -134,6 +134,7 @@ def compute_loss(
             tf.convert_to_tensor(anchor_boxes[l], dtype=tf.float32), [-1, 3, 2]
         )
         object_mask = y_true[..., 4:5]
+        grid = grid * object_mask
 
         batch_size = tf.cast(tf.shape(y_pred_raw)[0], tf.float32)
 
@@ -145,18 +146,16 @@ def compute_loss(
 
         # Compute raw xy:
         box_xy_true = y_true[..., 0:2] * grid_size - grid
-        box_xy_pred = y_pred_raw[..., 0:2]
+        box_xy_pred = tf.nn.sigmoid(y_pred_raw[..., 0:2])
 
         xy_loss = (
             tf.reduce_sum(
-                tf.keras.losses.binary_crossentropy(
-                    box_xy_true, box_xy_pred, from_logits=True
-                )
+                tf.keras.losses.mean_squared_error(box_xy_true, box_xy_pred)
                 * object_mask[..., 0]
                 * box_loss_scale[..., 0]
             )
             / batch_size
-        )
+        ) * 5
 
         # Loss 2: WH Loss
         box_wh_true = tf.math.log(y_true[..., 2:4] / anchor_boxes_tensor)
