@@ -89,6 +89,7 @@ if __name__ == "__main__":
             raise FileNotFoundError(f"Checkpoint {ARGS.load_checkpoint} not found")
 
         checkpoint_dir = ARGS.load_checkpoint.parent
+        model(tf.keras.Input(shape=(416, 416, 3)))
         model.load_weights(ARGS.load_checkpoint)
         regex = r"(?:.+)(?:\.e)(\d+)(?:.+)(?:.h5)"
         init_epoch = int(re.match(regex, ARGS.load_checkpoint.name).group(1)) + 1
@@ -98,19 +99,18 @@ if __name__ == "__main__":
         time_now = datetime.now()
         timestamp = time_now.strftime("%m%d%y-%H%M%S")
         checkpoint_dir = Path("./checkpoints/YOLOv3" + "-" + timestamp)
-        if not checkpoint_dir.exists():
-            checkpoint_dir.mkdir()
+        init_epoch = 0
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
 
     ### training the model:
 
     epochs = 500
-    max_num_weights = 5
+    max_num_weights = 10
 
-    for epoch in range(epochs):
+    for epoch in range(init_epoch, epochs):
 
-        print(f"Epoch {epoch+1}/{epochs}")
+        print(f"Epoch {epoch}/{epochs}")
 
         pbar = tf.keras.utils.Progbar(target=len(ds_train), width=30)
         metrics = {}
@@ -143,9 +143,7 @@ if __name__ == "__main__":
             for i, (raw_boxes, raw_scores, ground_truth_boxes) in enumerate(
                 zip(boxes_list, scores_list, tf.unstack(true_boxes))
             ):
-                pred_boxes, scores = non_max_suppression(
-                    raw_boxes, raw_scores, 30, 0.5
-                )
+                pred_boxes, scores = non_max_suppression(raw_boxes, raw_scores, 30, 0.5)
                 pred_boxes = tf.gather(
                     pred_boxes,
                     tf.constant([1, 0, 3, 2], dtype=tf.int32),
@@ -173,17 +171,20 @@ if __name__ == "__main__":
 
         metrics.update({"AP": ap, "TP": tp, "FP": fp})
 
+        cur_acc = ap
+
         pbar.update(steps, values=metrics.items(), finalize=True)
 
-        min_acc_file, max_acc_file, max_acc, num_weights = scan_weight_files(
+        if not checkpoint_dir.exists():
+            checkpoint_dir.mkdir()
+
+        min_epoch_file, max_epoch_file, max_epoch, num_weights = scan_weight_files(
             checkpoint_dir
         )
 
-        cur_acc = ap
-
         # Only save weights if test accuracy exceeds the previous best
         # weight file
-        if cur_acc > max_acc:
+        if epoch > max_epoch:
             save_name = "weights.e{0:03d}-acc{1:.4f}.h5".format(epoch, cur_acc)
 
             model.save_weights(checkpoint_dir / save_name)
@@ -191,4 +192,4 @@ if __name__ == "__main__":
             # Ensure max_num_weights is not exceeded by removing
             # minimum weight
             if max_num_weights > 0 and num_weights + 1 > max_num_weights:
-                os.remove(checkpoint_dir / min_acc_file)
+                os.remove(checkpoint_dir / min_epoch_file)

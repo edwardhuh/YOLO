@@ -94,16 +94,16 @@ def correct_ground_truth(ground_truths, grid_size, anchor_boxes):
     return tf.constant(output_tensor, dtype=tf.float32)
 
 
-if __name__ == "__main__":
-    ground_truths = tf.convert_to_tensor(
-        [[[0, 0, 0.5, 0.5], [1, 1, 0.5, 0.5]]], dtype=tf.float32
-    )
+# if __name__ == "__main__":
+#     ground_truths = tf.convert_to_tensor(
+#         [[[0, 0, 0.5, 0.5], [1, 1, 0.5, 0.5]]], dtype=tf.float32
+#     )
 
-    outputs = correct_ground_truths(ground_truths, GRID_SIZES, anchor_boxes)
-    assert outputs[0][0, 0, 0, 2, 4] == 1.0
-    assert outputs[1][0, 0, 0, 2, 2] == 0.5
-    assert outputs[0][0, 12, 12, 2, 4] == 1.0
-    assert outputs[1][0, 25, 25, 2, 2] == 0.5
+#     outputs = correct_ground_truths(ground_truths, GRID_SIZES, anchor_boxes)
+#     assert outputs[0][0, 0, 0, 2, 4] == 1.0
+#     assert outputs[1][0, 0, 0, 2, 2] == 0.5
+#     assert outputs[0][0, 12, 12, 2, 4] == 1.0
+#     assert outputs[1][0, 25, 25, 2, 2] == 0.5
 
 
 def parse_args():
@@ -129,25 +129,23 @@ def scan_weight_files(checkpoint_dir):
     """Scans checkpoint directory to find current minimum and maximum
     accuracy weights files as well as the number of weights."""
 
-    min_acc = float("inf")
-    max_acc = 0
-    min_acc_file = ""
-    max_acc_file = ""
+    min_epoch = float("inf")
+    max_epoch = 0
+    min_epoch_file = ""
+    max_epoch_file = ""
     num_weights = 0
 
     for weight_file in checkpoint_dir.glob("*.h5"):
         num_weights += 1
-        file_acc = float(
-            re.findall(r"[+-]?\d+\.\d+", weight_file.name.split("acc")[-1])[0]
-        )
-        if file_acc > max_acc:
-            max_acc = file_acc
-            max_acc_file = weight_file.name
-        if file_acc < min_acc:
-            min_acc = file_acc
-            min_acc_file = weight_file.name
+        file_epoch = int(weight_file.stem[9:12])
+        if file_epoch > max_epoch:
+            max_epoch = file_epoch
+            max_epoch_file = weight_file.name
+        if file_epoch < min_epoch:
+            min_epoch = file_epoch
+            min_epoch_file = weight_file.name
 
-    return min_acc_file, max_acc_file, max_acc, num_weights
+    return min_epoch_file, max_epoch_file, max_epoch, num_weights
 
 
 def correct_boxes_and_scores(
@@ -205,11 +203,14 @@ def correct_boxes_and_scores(
             boxes_list[i].append(boxes)
             scores_list[i].append(box_scores)
 
-    for i, (boxes, scores) in enumerate(zip(boxes_list, scores_list)):
-        boxes_list[i] = tf.concat(boxes, axis=0)
-        scores_list[i] = tf.concat(scores, axis=0)
+    result_boxes_list = [
+        tf.concat([boxes1, boxes2], axis=0) for boxes1, boxes2 in zip(*boxes_list)
+    ]
+    result_scores_list = [
+        tf.concat([scores1, scores2], axis=0) for scores1, scores2 in zip(*scores_list)
+    ]
 
-    return boxes_list, scores_list
+    return result_boxes_list, result_scores_list
 
 
 def non_max_suppression(boxes, scores, max_output_size=100, iou_threshhold=0.5):
@@ -227,5 +228,5 @@ def non_max_suppression(boxes, scores, max_output_size=100, iou_threshhold=0.5):
     return boxes, scores
 
 
-# if __name__ == "__main__":
-#     print(scan_weight_files(Path("./checkpoints/YOLOv3-050622-061555")))
+if __name__ == "__main__":
+    print(scan_weight_files(Path("checkpoints/YOLOv3-050822-083257")))

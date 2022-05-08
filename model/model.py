@@ -165,6 +165,7 @@ class YOLOv3_Tiny(tf.keras.Model):
         )
 
         self.yolo_head_1 = YOLO_Head(self.anchor_boxes[0], n_classes=self.n_classes)
+        self.yolo_head_1.trainable = False
 
         ######
 
@@ -183,10 +184,11 @@ class YOLOv3_Tiny(tf.keras.Model):
         )
 
         self.yolo_head_2 = YOLO_Head(self.anchor_boxes[1], n_classes=self.n_classes)
+        self.yolo_head_1.trainable = False
 
         ######
 
-    def __call__(self, inputs, train=True):
+    def call(self, inputs, train=True):
 
         x1 = self.conv1(inputs)
         x1 = self.conv2(x1)

@@ -15,13 +15,14 @@ def precision(
     Compute average precision for given true and predicted boxes.
     """
     n_pred = tf.shape(pred_boxes)[0].numpy()
+    n_true = tf.shape(true_boxes)[0].numpy()
     if n_pred == 0:
         return 0, 0
 
     true_pos = 0
     false_pos = 0
 
-    detected = np.zeros(tf.shape(true_boxes)[0].numpy(), dtype=bool)
+    detected = np.zeros(n_true, dtype=bool)
 
     for i in range(n_pred):
 
