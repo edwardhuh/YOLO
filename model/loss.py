@@ -197,7 +197,7 @@ def compute_loss(
         class_loss = tf.reduce_sum(class_loss) / batch_size
 
         # Loss 5: Total Loss
-        total_loss = xy_loss + wh_loss + conf_loss + class_loss
+        total_loss = xy_loss + wh_loss + conf_loss
 
         results[f"xy_{l}"] = xy_loss.numpy()
         results[f"wh_{l}"] = wh_loss.numpy()

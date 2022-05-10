@@ -148,9 +148,7 @@ def scan_weight_files(checkpoint_dir):
     return min_epoch_file, max_epoch_file, max_epoch, num_weights
 
 
-def correct_boxes_and_scores(
-    y_pred_list, input_size=416, image_sizes=None, score_threshold=0.6
-):
+def correct_boxes_and_scores(y_pred_list, score_threshold=0.6):
     """Correct bounding boxes for network output."""
 
     boxes_list = [[], []]
@@ -162,29 +160,12 @@ def correct_boxes_and_scores(
         # correct boxes for network output
         box_yx = box_xy[..., ::-1]
         box_hw = box_wh[..., ::-1]
-        input_shape = tf.constant([input_size, input_size], dtype=tf.float32)
-
-        if image_sizes is not None:
-            image_shape = tf.constant(image_sizes, dtype=tf.float32)
-        else:
-            image_shape = input_shape
-
-        new_shape = tf.round(image_shape * tf.reduce_min(input_shape / image_shape))
-        offset = (input_shape - new_shape) / 2.0 / input_shape
-        scale = input_shape / new_shape
-        box_yx = (box_yx - offset) * scale
-        box_hw *= scale
 
         box_mins = box_yx - (box_hw / 2.0)
         box_maxes = box_yx + (box_hw / 2.0)
 
         boxes_tensor = tf.concat(
-            [
-                box_mins[..., 0:1],  # y_min
-                box_mins[..., 1:2],  # x_min
-                box_maxes[..., 0:1],  # y_max
-                box_maxes[..., 1:2],  # x_max
-            ],
+            [box_mins, box_maxes],
             axis=-1,
         )
         box_scores_tensor = box_confidence * box_class_probs
@@ -213,14 +194,17 @@ def correct_boxes_and_scores(
     return result_boxes_list, result_scores_list
 
 
-def non_max_suppression(boxes, scores, max_output_size=100, iou_threshhold=0.5):
+def non_max_suppression(
+    boxes, scores, max_output_size=100, iou_threshhold=0.5, score_threshold=0.5
+):
     """Perform non-max suppression on bounding boxes."""
 
     nms_index = tf.image.non_max_suppression(
         boxes,
         scores,
-        tf.constant(max_output_size, dtype=tf.int32),
-        tf.constant(iou_threshhold, dtype=tf.float32),
+        max_output_size,
+        iou_threshhold,
+        score_threshold=score_threshold,
     )
     boxes = tf.gather(boxes, nms_index)
     scores = tf.gather(scores, nms_index)
